@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits } from 'discord.js';
+import { Client, GatewayIntentBits, Partials } from 'discord.js';
 
 export async function getDiscordClient() {
   const token = process.env.DISCORD_BOT_TOKEN;
@@ -12,9 +12,9 @@ export async function getDiscordClient() {
       GatewayIntentBits.Guilds, 
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
-      GatewayIntentBits.GuildMembers,
       GatewayIntentBits.DirectMessages
-    ]
+    ],
+    partials: [Partials.Channel]
   });
 
   await client.login(token);
