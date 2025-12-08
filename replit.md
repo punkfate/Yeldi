@@ -33,9 +33,11 @@ package.json  - Node.js dependencies
 - Uses Discord.js library
 - Supports both slash commands and prefix commands
 - Bot token stored securely in environment secrets
+- Admin-only commands (requires Administrator permission)
 
 ## Architecture
 - Bot authenticates using DISCORD_BOT_TOKEN environment variable
 - Slash commands are registered globally on startup
 - Both slash and prefix commands are handled in parallel
+- Commands restricted to users with Administrator permission
 - Error handling for DM failures and permission issues

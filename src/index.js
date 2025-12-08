@@ -1,5 +1,5 @@
 import { getDiscordClient } from './discord.js';
-import { REST, Routes, SlashCommandBuilder } from 'discord.js';
+import { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 
 const PREFIX = '!';
 
@@ -7,6 +7,7 @@ const slashCommands = [
   new SlashCommandBuilder()
     .setName('send')
     .setDescription('Send a personalized direct message to a user')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addUserOption(option => 
       option.setName('user')
         .setDescription('The user to send the DM to')
@@ -18,6 +19,7 @@ const slashCommands = [
   new SlashCommandBuilder()
     .setName('say')
     .setDescription('Send a message to a specific channel')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addChannelOption(option =>
       option.setName('channel')
         .setDescription('The channel to send the message to')
@@ -29,6 +31,7 @@ const slashCommands = [
   new SlashCommandBuilder()
     .setName('announce')
     .setDescription('Send a message to the current channel')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addStringOption(option =>
       option.setName('message')
         .setDescription('The message to send')
@@ -36,7 +39,12 @@ const slashCommands = [
   new SlashCommandBuilder()
     .setName('help')
     .setDescription('Show all available commands')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 ];
+
+function isAdmin(member) {
+  return member.permissions.has(PermissionFlagsBits.Administrator);
+}
 
 async function registerSlashCommands(client) {
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
@@ -101,6 +109,11 @@ async function main() {
     client.on('messageCreate', async (message) => {
       if (message.author.bot) return;
       if (!message.content.startsWith(PREFIX)) return;
+      
+      if (!message.member || !isAdmin(message.member)) {
+        await message.reply('You need Administrator permissions to use this bot.');
+        return;
+      }
 
       const args = message.content.slice(PREFIX.length).trim().split(/ +/);
       const command = args.shift().toLowerCase();
