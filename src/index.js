@@ -101,8 +101,8 @@ async function handleSayChannel(message, args) {
     await targetChannel.send(personalizedMessage);
     await message.reply(`Message sent to ${targetChannel}!`);
   } catch (error) {
+    console.error('Failed to send to channel:', error);
     await message.reply(`Failed to send message to ${targetChannel}. Check bot permissions.`);
-    throw error;
   }
 }
 
