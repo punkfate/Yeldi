@@ -1,6 +1,57 @@
 import { getDiscordClient } from './discord.js';
+import { REST, Routes, SlashCommandBuilder } from 'discord.js';
 
 const PREFIX = '!';
+
+const slashCommands = [
+  new SlashCommandBuilder()
+    .setName('send')
+    .setDescription('Send a personalized direct message to a user')
+    .addUserOption(option => 
+      option.setName('user')
+        .setDescription('The user to send the DM to')
+        .setRequired(true))
+    .addStringOption(option =>
+      option.setName('message')
+        .setDescription('The message to send')
+        .setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('say')
+    .setDescription('Send a message to a specific channel')
+    .addChannelOption(option =>
+      option.setName('channel')
+        .setDescription('The channel to send the message to')
+        .setRequired(true))
+    .addStringOption(option =>
+      option.setName('message')
+        .setDescription('The message to send')
+        .setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('announce')
+    .setDescription('Send a message to the current channel')
+    .addStringOption(option =>
+      option.setName('message')
+        .setDescription('The message to send')
+        .setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('help')
+    .setDescription('Show all available commands')
+];
+
+async function registerSlashCommands(client) {
+  const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+  
+  try {
+    console.log('Registering slash commands...');
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: slashCommands.map(cmd => cmd.toJSON()) }
+    );
+    console.log('Slash commands registered successfully!');
+  } catch (error) {
+    console.error('Failed to register slash commands:', error);
+  }
+}
 
 async function main() {
   console.log('Starting Discord bot...');
@@ -8,13 +59,43 @@ async function main() {
   try {
     const client = await getDiscordClient();
     
-    client.on('ready', () => {
+    client.on('ready', async () => {
       console.log(`Bot is online as ${client.user.tag}!`);
-      console.log('Available commands:');
-      console.log('  !send @user <message> - Send a personalized DM to a user');
-      console.log('  !say #channel <message> - Send a message to a specific channel');
-      console.log('  !announce <message> - Send a message to the current channel');
-      console.log('  !help - Show all available commands');
+      await registerSlashCommands(client);
+      console.log('Available commands (prefix ! or slash /):');
+      console.log('  /send or !send @user <message> - Send a personalized DM');
+      console.log('  /say or !say #channel <message> - Send to a channel');
+      console.log('  /announce or !announce <message> - Send to current channel');
+      console.log('  /help or !help - Show all commands');
+    });
+
+    client.on('interactionCreate', async (interaction) => {
+      if (!interaction.isChatInputCommand()) return;
+
+      try {
+        switch (interaction.commandName) {
+          case 'send':
+            await handleSlashSendDM(interaction);
+            break;
+          case 'say':
+            await handleSlashSayChannel(interaction);
+            break;
+          case 'announce':
+            await handleSlashAnnounce(interaction);
+            break;
+          case 'help':
+            await handleSlashHelp(interaction);
+            break;
+        }
+      } catch (error) {
+        console.error('Error handling slash command:', error);
+        const reply = { content: 'An error occurred while processing your command.', ephemeral: true };
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp(reply);
+        } else {
+          await interaction.reply(reply);
+        }
+      }
     });
 
     client.on('messageCreate', async (message) => {
@@ -39,7 +120,7 @@ async function main() {
             await handleHelp(message);
             break;
           default:
-            await message.reply(`Unknown command: \`${command}\`. Use \`!help\` to see available commands.`);
+            await message.reply(`Unknown command: \`${command}\`. Use \`!help\` or \`/help\` to see available commands.`);
         }
       } catch (error) {
         console.error('Error handling command:', error);
@@ -53,6 +134,65 @@ async function main() {
     console.error('Failed to start bot:', error);
     process.exit(1);
   }
+}
+
+async function handleSlashSendDM(interaction) {
+  const targetUser = interaction.options.getUser('user');
+  const personalizedMessage = interaction.options.getString('message');
+
+  try {
+    await targetUser.send(personalizedMessage);
+    await interaction.reply({ content: `Message sent to ${targetUser.tag}!`, ephemeral: true });
+  } catch (error) {
+    if (error.code === 50007) {
+      await interaction.reply({ content: `Cannot send DM to ${targetUser.tag}. They may have DMs disabled.`, ephemeral: true });
+    } else {
+      throw error;
+    }
+  }
+}
+
+async function handleSlashSayChannel(interaction) {
+  const targetChannel = interaction.options.getChannel('channel');
+  const personalizedMessage = interaction.options.getString('message');
+
+  try {
+    await targetChannel.send(personalizedMessage);
+    await interaction.reply({ content: `Message sent to ${targetChannel}!`, ephemeral: true });
+  } catch (error) {
+    console.error('Failed to send to channel:', error);
+    await interaction.reply({ content: `Failed to send message to ${targetChannel}. Check bot permissions.`, ephemeral: true });
+  }
+}
+
+async function handleSlashAnnounce(interaction) {
+  const personalizedMessage = interaction.options.getString('message');
+  await interaction.channel.send(personalizedMessage);
+  await interaction.reply({ content: 'Message announced!', ephemeral: true });
+}
+
+async function handleSlashHelp(interaction) {
+  const helpMessage = `
+**Discord Bot Commands**
+
+**Slash Commands:**
+\`/send user:<@user> message:<text>\` - Send a DM to a user
+\`/say channel:<#channel> message:<text>\` - Send to a channel
+\`/announce message:<text>\` - Send to current channel
+\`/help\` - Show this help
+
+**Prefix Commands:**
+\`!send @user <message>\` - Send a DM to a user
+\`!say #channel <message>\` - Send to a channel
+\`!announce <message>\` - Send to current channel
+\`!help\` - Show this help
+
+**Tips:**
+- Use Discord formatting (bold, italic, etc.)
+- Mention users with @username for personalization
+`;
+
+  await interaction.reply({ content: helpMessage, ephemeral: true });
 }
 
 async function handleSendDM(message, args) {
@@ -121,20 +261,21 @@ async function handleHelp(message) {
   const helpMessage = `
 **Discord Bot Commands**
 
-\`!send @user <message>\` - Send a personalized direct message to a user
-  Example: \`!send @John Hello John, welcome to our server!\`
+**Slash Commands:**
+\`/send user:<@user> message:<text>\` - Send a DM to a user
+\`/say channel:<#channel> message:<text>\` - Send to a channel
+\`/announce message:<text>\` - Send to current channel
+\`/help\` - Show this help
 
-\`!say #channel <message>\` - Send a message to a specific channel
-  Example: \`!say #general Hello everyone!\`
-
-\`!announce <message>\` - Send a message to the current channel
-  Example: \`!announce Important announcement here!\`
-
-\`!help\` - Show this help message
+**Prefix Commands:**
+\`!send @user <message>\` - Send a DM to a user
+\`!say #channel <message>\` - Send to a channel
+\`!announce <message>\` - Send to current channel
+\`!help\` - Show this help
 
 **Tips:**
-- You can use Discord formatting in your messages (bold, italic, etc.)
-- Mention users with @username in your messages for personalization
+- Use Discord formatting (bold, italic, etc.)
+- Mention users with @username for personalization
 `;
 
   await message.reply(helpMessage);
