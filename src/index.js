@@ -116,14 +116,21 @@ async function main() {
     client.on('messageCreate', async (message) => {
       if (message.author.bot) return;
       if (!message.content.startsWith(PREFIX)) return;
-      
+
+      const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+      const command = args.shift().toLowerCase();
+
+      // Ping command is available to everyone
+      if (command === 'ping') {
+        await handlePing(message);
+        return;
+      }
+
+      // All other commands require admin
       if (!message.member || !isAdmin(message.member)) {
         await message.reply('You need Administrator permissions to use this bot.');
         return;
       }
-
-      const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-      const command = args.shift().toLowerCase();
 
       try {
         switch (command) {
@@ -135,9 +142,6 @@ async function main() {
             break;
           case 'announce':
             await handleAnnounce(message, args);
-            break;
-          case 'ping':
-            await handlePing(message);
             break;
           case 'help':
             await handleHelp(message);
