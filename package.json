@@ -7,11 +7,16 @@
     "start": "node src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["discord", "bot", "messenger"],
+  "keywords": [
+    "discord",
+    "bot",
+    "messenger"
+  ],
   "author": "",
   "license": "ISC",
   "description": "A Discord bot for sending personalized messages",
   "dependencies": {
-    "discord.js": "^14.25.1"
+    "discord.js": "^14.25.1",
+    "express": "^5.2.1"
   }
 }
