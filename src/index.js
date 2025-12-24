@@ -39,7 +39,10 @@ const slashCommands = [
   new SlashCommandBuilder()
     .setName('help')
     .setDescription('Show all available commands')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+  new SlashCommandBuilder()
+    .setName('ping')
+    .setDescription('Check the bot\'s latency')
 ];
 
 function isAdmin(member) {
@@ -74,6 +77,7 @@ async function main() {
       console.log('  /send or !send @user <message> - Send a personalized DM');
       console.log('  /say or !say #channel <message> - Send to a channel');
       console.log('  /announce or !announce <message> - Send to current channel');
+      console.log('  /ping - Check bot latency');
       console.log('  /help or !help - Show all commands');
     });
 
@@ -90,6 +94,9 @@ async function main() {
             break;
           case 'announce':
             await handleSlashAnnounce(interaction);
+            break;
+          case 'ping':
+            await handleSlashPing(interaction);
             break;
           case 'help':
             await handleSlashHelp(interaction);
@@ -128,6 +135,9 @@ async function main() {
             break;
           case 'announce':
             await handleAnnounce(message, args);
+            break;
+          case 'ping':
+            await handlePing(message);
             break;
           case 'help':
             await handleHelp(message);
@@ -184,6 +194,11 @@ async function handleSlashAnnounce(interaction) {
   await interaction.reply({ content: 'Message announced!', ephemeral: true });
 }
 
+async function handleSlashPing(interaction) {
+  const ping = interaction.client.ws.ping;
+  await interaction.reply({ content: `🏓 Pong! Bot latency: **${ping}ms**`, ephemeral: true });
+}
+
 async function handleSlashHelp(interaction) {
   const helpMessage = `
 **Discord Bot Commands**
@@ -192,12 +207,14 @@ async function handleSlashHelp(interaction) {
 \`/send user:<@user> message:<text>\` - Send a DM to a user
 \`/say channel:<#channel> message:<text>\` - Send to a channel
 \`/announce message:<text>\` - Send to current channel
+\`/ping\` - Check bot latency
 \`/help\` - Show this help
 
 **Prefix Commands:**
 \`!send @user <message>\` - Send a DM to a user
 \`!say #channel <message>\` - Send to a channel
 \`!announce <message>\` - Send to current channel
+\`!ping\` - Check bot latency
 \`!help\` - Show this help
 
 **Tips:**
@@ -270,6 +287,11 @@ async function handleAnnounce(message, args) {
   await message.channel.send(personalizedMessage);
 }
 
+async function handlePing(message) {
+  const ping = message.client.ws.ping;
+  await message.reply(`🏓 Pong! Bot latency: **${ping}ms**`);
+}
+
 async function handleHelp(message) {
   const helpMessage = `
 **Discord Bot Commands**
@@ -278,12 +300,14 @@ async function handleHelp(message) {
 \`/send user:<@user> message:<text>\` - Send a DM to a user
 \`/say channel:<#channel> message:<text>\` - Send to a channel
 \`/announce message:<text>\` - Send to current channel
+\`/ping\` - Check bot latency
 \`/help\` - Show this help
 
 **Prefix Commands:**
 \`!send @user <message>\` - Send a DM to a user
 \`!say #channel <message>\` - Send to a channel
 \`!announce <message>\` - Send to current channel
+\`!ping\` - Check bot latency
 \`!help\` - Show this help
 
 **Tips:**

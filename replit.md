@@ -1,47 +1,35 @@
-# Discord Bot Project
+# Discord Personalized Messenger Bot
 
 ## Overview
-This project contains two Discord bots:
-1. **Discord Personalized Messenger** - Send personalized messages to users and channels using both slash commands (/) and prefix commands (!)
-2. **Bot Activo** - Active Developer badge bot with slash commands
+A Discord bot that allows you to send personalized messages to users and channels using both slash commands (/) and prefix commands (!).
 
 ## Recent Changes
-- **2025-12-24**: Added bot-activo for Active Developer badge
-- **2025-01-08**: Added slash command support to Messenger bot
+- **2025-12-24**: Added ping command to check bot latency, removed bot-activo
+- **2025-01-08**: Added slash command support alongside prefix commands
 - **2025-01-08**: Initial bot creation with command handler
 
-## Bot 1: Discord Personalized Messenger
+## Commands
 
-### Commands
-#### Slash Commands
+### Slash Commands
 - `/send user:@user message:<text>` - Send a personalized DM to a user
 - `/say channel:#channel message:<text>` - Send a message to a specific channel
 - `/announce message:<text>` - Send a message to the current channel
+- `/ping` - Check the bot's latency
 - `/help` - Show all available commands
 
-#### Prefix Commands
+### Prefix Commands
 - `!send @user <message>` - Send a personalized direct message to a user
 - `!say #channel <message>` - Send a message to a specific channel
 - `!announce <message>` - Send a message to the current channel
+- `!ping` - Check the bot's latency
 - `!help` - Show all available commands
 
-### Structure
+## Project Structure
 ```
 src/
   discord.js  - Discord client authentication
   index.js    - Main bot code with command handlers (slash + prefix)
-```
-
-## Bot 2: Bot Activo
-
-### Commands
-- `/activo` - Global slash command for Active Developer badge
-
-### Structure
-```
-bot-activo/
-  index.js    - Bot with global slash command and express server
-  package.json
+package.json  - Node.js dependencies
 ```
 
 ## User Preferences
