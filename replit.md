@@ -4,6 +4,7 @@
 A Discord bot that allows you to send personalized messages to users and channels using both slash commands (/) and prefix commands (!).
 
 ## Recent Changes
+- **2025-12-24**: Added web server for uptime monitoring, made ping command visible to everyone
 - **2025-12-24**: Added ping command to check bot latency, removed bot-activo
 - **2025-01-08**: Added slash command support alongside prefix commands
 - **2025-01-08**: Initial bot creation with command handler
@@ -37,10 +38,20 @@ package.json  - Node.js dependencies
 - Supports both slash commands and prefix commands
 - Bot token stored securely in environment secrets
 - Admin-only commands (requires Administrator permission)
+- Web server for uptime monitoring with UptimeRobot
 
 ## Architecture
 - Bot authenticates using DISCORD_BOT_TOKEN environment variable
 - Slash commands are registered globally on startup
 - Both slash and prefix commands are handled in parallel
-- Commands restricted to users with Administrator permission
+- Commands restricted to users with Administrator permission (except ping)
+- Ping command is public and visible to everyone
+- Express web server runs on port 3000 for uptime monitoring
 - Error handling for DM failures and permission issues
+
+## Uptime Monitoring
+To keep the bot alive 24/7:
+1. Get your Replit domain from the web server URL
+2. Visit [UptimeRobot.com](https://uptimerobot.com)
+3. Create a monitor pointing to your Replit web server
+4. Set interval to ping every 5 minutes

@@ -1,5 +1,6 @@
 import { getDiscordClient } from './discord.js';
 import { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
+import express from 'express';
 
 const PREFIX = '!';
 
@@ -200,7 +201,7 @@ async function handleSlashAnnounce(interaction) {
 
 async function handleSlashPing(interaction) {
   const ping = interaction.client.ws.ping;
-  await interaction.reply({ content: `🏓 Pong! Bot latency: **${ping}ms**`, ephemeral: true });
+  await interaction.reply(`🏓 Pong! Bot latency: **${ping}ms**`);
 }
 
 async function handleSlashHelp(interaction) {
@@ -321,5 +322,17 @@ async function handleHelp(message) {
 
   await message.reply(helpMessage);
 }
+
+// Start Express server for uptime monitoring
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.send('🤖 Discord Bot is running!');
+});
+
+app.listen(PORT, () => {
+  console.log(`🌐 Web server running on port ${PORT}`);
+});
 
 main();
