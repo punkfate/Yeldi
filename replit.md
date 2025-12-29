@@ -16,6 +16,8 @@ A Discord bot that allows you to send personalized messages to users and channel
 - `/say channel:#channel message:<text>` - Send a message to a specific channel
 - `/announce message:<text>` - Send a message to the current channel
 - `/ping` - Check the bot's latency
+- `/lock` - Lock the current channel to prevent users from talking (admin only)
+- `/unlock` - Unlock the current channel to allow users to talk (admin only)
 - `/help` - Show all available commands
 
 ### Prefix Commands
@@ -23,6 +25,8 @@ A Discord bot that allows you to send personalized messages to users and channel
 - `!say #channel <message>` - Send a message to a specific channel
 - `!announce <message>` - Send a message to the current channel
 - `!ping` - Check the bot's latency
+- `!lock` - Lock the current channel (admin only)
+- `!unlock` - Unlock the current channel (admin only)
 - `!help` - Show all available commands
 
 ## Project Structure

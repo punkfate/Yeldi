@@ -43,7 +43,15 @@ const slashCommands = [
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   new SlashCommandBuilder()
     .setName('ping')
-    .setDescription('Check the bot\'s latency')
+    .setDescription('Check the bot\'s latency'),
+  new SlashCommandBuilder()
+    .setName('lock')
+    .setDescription('Lock the current channel to prevent users from talking')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+  new SlashCommandBuilder()
+    .setName('unlock')
+    .setDescription('Unlock the current channel to allow users to talk')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 ];
 
 function isAdmin(member) {
@@ -99,6 +107,12 @@ async function main() {
           case 'ping':
             await handleSlashPing(interaction);
             break;
+          case 'lock':
+            await handleSlashLock(interaction);
+            break;
+          case 'unlock':
+            await handleSlashUnlock(interaction);
+            break;
           case 'help':
             await handleSlashHelp(interaction);
             break;
@@ -143,6 +157,12 @@ async function main() {
             break;
           case 'announce':
             await handleAnnounce(message, args);
+            break;
+          case 'lock':
+            await handleLock(message);
+            break;
+          case 'unlock':
+            await handleUnlock(message);
             break;
           case 'help':
             await handleHelp(message);
@@ -204,6 +224,34 @@ async function handleSlashPing(interaction) {
   await interaction.reply(`🏓 Pong! Bot latency: **${ping}ms**`);
 }
 
+async function handleSlashLock(interaction) {
+  try {
+    const channel = interaction.channel;
+    await channel.permissionOverwrites.edit(
+      channel.guild.roles.everyone,
+      { SendMessages: false }
+    );
+    await interaction.reply({ content: `🔒 Channel locked! Users cannot talk.`, ephemeral: true });
+  } catch (error) {
+    console.error('Failed to lock channel:', error);
+    await interaction.reply({ content: 'Failed to lock the channel. Check bot permissions.', ephemeral: true });
+  }
+}
+
+async function handleSlashUnlock(interaction) {
+  try {
+    const channel = interaction.channel;
+    await channel.permissionOverwrites.edit(
+      channel.guild.roles.everyone,
+      { SendMessages: null }
+    );
+    await interaction.reply({ content: `🔓 Channel unlocked! Users can now talk.`, ephemeral: true });
+  } catch (error) {
+    console.error('Failed to unlock channel:', error);
+    await interaction.reply({ content: 'Failed to unlock the channel. Check bot permissions.', ephemeral: true });
+  }
+}
+
 async function handleSlashHelp(interaction) {
   const helpMessage = `
 **Discord Bot Commands**
@@ -213,6 +261,8 @@ async function handleSlashHelp(interaction) {
 \`/say channel:<#channel> message:<text>\` - Send to a channel
 \`/announce message:<text>\` - Send to current channel
 \`/ping\` - Check bot latency
+\`/lock\` - Lock channel (admin only)
+\`/unlock\` - Unlock channel (admin only)
 \`/help\` - Show this help
 
 **Prefix Commands:**
@@ -220,6 +270,8 @@ async function handleSlashHelp(interaction) {
 \`!say #channel <message>\` - Send to a channel
 \`!announce <message>\` - Send to current channel
 \`!ping\` - Check bot latency
+\`!lock\` - Lock channel (admin only)
+\`!unlock\` - Unlock channel (admin only)
 \`!help\` - Show this help
 
 **Tips:**
@@ -297,6 +349,34 @@ async function handlePing(message) {
   await message.reply(`🏓 Pong! Bot latency: **${ping}ms**`);
 }
 
+async function handleLock(message) {
+  try {
+    const channel = message.channel;
+    await channel.permissionOverwrites.edit(
+      channel.guild.roles.everyone,
+      { SendMessages: false }
+    );
+    await message.reply('🔒 Channel locked! Users cannot talk.');
+  } catch (error) {
+    console.error('Failed to lock channel:', error);
+    await message.reply('Failed to lock the channel. Check bot permissions.');
+  }
+}
+
+async function handleUnlock(message) {
+  try {
+    const channel = message.channel;
+    await channel.permissionOverwrites.edit(
+      channel.guild.roles.everyone,
+      { SendMessages: null }
+    );
+    await message.reply('🔓 Channel unlocked! Users can now talk.');
+  } catch (error) {
+    console.error('Failed to unlock channel:', error);
+    await message.reply('Failed to unlock the channel. Check bot permissions.');
+  }
+}
+
 async function handleHelp(message) {
   const helpMessage = `
 **Discord Bot Commands**
@@ -306,6 +386,8 @@ async function handleHelp(message) {
 \`/say channel:<#channel> message:<text>\` - Send to a channel
 \`/announce message:<text>\` - Send to current channel
 \`/ping\` - Check bot latency
+\`/lock\` - Lock channel (admin only)
+\`/unlock\` - Unlock channel (admin only)
 \`/help\` - Show this help
 
 **Prefix Commands:**
@@ -313,6 +395,8 @@ async function handleHelp(message) {
 \`!say #channel <message>\` - Send to a channel
 \`!announce <message>\` - Send to current channel
 \`!ping\` - Check bot latency
+\`!lock\` - Lock channel (admin only)
+\`!unlock\` - Unlock channel (admin only)
 \`!help\` - Show this help
 
 **Tips:**
