@@ -409,13 +409,13 @@ async function handleHelp(message) {
 
 // Start Express server for uptime monitoring
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 5000; // Bind to port 5000 for Replit Webview
 
 app.get('/', (req, res) => {
   res.send('🤖 Discord Bot is running!');
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 Web server running on port ${PORT}`);
 });
 
