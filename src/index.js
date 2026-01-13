@@ -407,16 +407,6 @@ async function handleHelp(message) {
   await message.reply(helpMessage);
 }
 
-// Start Express server for uptime monitoring
-const app = express();
-const PORT = 5000; // Bind to port 5000 for Replit Webview
-
-app.get('/', (req, res) => {
-  res.send('🤖 Discord Bot is running!');
-});
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🌐 Web server running on port ${PORT}`);
-});
+import './web.js';
 
 main();
