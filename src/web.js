@@ -5,7 +5,7 @@ const PORT = 5000;
 
 app.get("/", (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
-  res.send("🤖 Discord Bot is running!");
+  res.send(`🤖 Discord Bot is running!`);
 });
 
 app.listen(PORT, '0.0.0.0', () => {
