@@ -5,8 +5,21 @@ const app = express();
 const PORT = 5000;
 
 app.get("/", (req, res) => {
+  const domain = process.env.REPLIT_DEV_DOMAIN || "your-app.replit.app";
   res.setHeader('Cache-Control', 'no-cache');
-  res.send("🤖 Discord Bot is running and ready for traffic!");
+  res.send(`
+    <html>
+      <body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #2c2f33; color: white;">
+        <h1>🤖 Discord Bot is running!</h1>
+        <p>Your bot is online and ready.</p>
+        <div style="background: #23272a; padding: 20px; border-radius: 8px; border: 1px solid #7289da; margin-top: 20px;">
+          <p style="margin: 0; color: #7289da; font-weight: bold;">Bot URL:</p>
+          <code style="font-size: 1.2rem; word-break: break-all;">https://${domain}</code>
+        </div>
+        <p style="margin-top: 20px; font-size: 0.9rem; color: #99aab5;">Use this URL for UptimeRobot monitoring</p>
+      </body>
+    </html>
+  `);
 });
 
 // Explicitly bind to 0.0.0.0 to accept external connections
