@@ -18,18 +18,26 @@ function saveConfig(config) {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
 }
 
-export function getGuildConfig(guildId) {
-  const config = loadConfig();
+function ensureGuild(config, guildId) {
   if (!config[guildId]) {
-    config[guildId] = { staffRoles: [], tickets: {}, ticketCounter: 0 };
-    saveConfig(config);
+    config[guildId] = { staffRoles: [], tickets: {}, ticketCounter: 0, transcriptChannel: null };
   }
+  if (!('transcriptChannel' in config[guildId])) {
+    config[guildId].transcriptChannel = null;
+  }
+  return config;
+}
+
+export function getGuildConfig(guildId) {
+  let config = loadConfig();
+  config = ensureGuild(config, guildId);
+  saveConfig(config);
   return config[guildId];
 }
 
 export function addStaffRole(guildId, roleId) {
-  const config = loadConfig();
-  if (!config[guildId]) config[guildId] = { staffRoles: [], tickets: {}, ticketCounter: 0 };
+  let config = loadConfig();
+  config = ensureGuild(config, guildId);
   if (!config[guildId].staffRoles.includes(roleId)) {
     config[guildId].staffRoles.push(roleId);
     saveConfig(config);
@@ -38,21 +46,21 @@ export function addStaffRole(guildId, roleId) {
   return false;
 }
 
-export function removeStaffRole(guildId, roleId) {
+export function setTranscriptChannel(guildId, channelId) {
+  let config = loadConfig();
+  config = ensureGuild(config, guildId);
+  config[guildId].transcriptChannel = channelId;
+  saveConfig(config);
+}
+
+export function getTranscriptChannel(guildId) {
   const config = loadConfig();
-  if (!config[guildId]) return false;
-  const idx = config[guildId].staffRoles.indexOf(roleId);
-  if (idx !== -1) {
-    config[guildId].staffRoles.splice(idx, 1);
-    saveConfig(config);
-    return true;
-  }
-  return false;
+  return config[guildId]?.transcriptChannel || null;
 }
 
 export function createTicket(guildId, channelId, userId, ticketNumber) {
-  const config = loadConfig();
-  if (!config[guildId]) config[guildId] = { staffRoles: [], tickets: {}, ticketCounter: 0 };
+  let config = loadConfig();
+  config = ensureGuild(config, guildId);
   config[guildId].tickets[channelId] = {
     userId,
     claimedBy: null,
@@ -96,8 +104,8 @@ export function deleteTicket(guildId, channelId) {
 }
 
 export function nextTicketNumber(guildId) {
-  const config = loadConfig();
-  if (!config[guildId]) config[guildId] = { staffRoles: [], tickets: {}, ticketCounter: 0 };
+  let config = loadConfig();
+  config = ensureGuild(config, guildId);
   const next = (config[guildId].ticketCounter || 0) + 1;
   return next;
 }

@@ -13,7 +13,8 @@ import {
   claimTicket,
   unclaimTicket,
   deleteTicket,
-  nextTicketNumber
+  nextTicketNumber,
+  getTranscriptChannel
 } from './ticketConfig.js';
 
 export async function handleTicketsPanel(interaction) {
@@ -113,7 +114,7 @@ export async function handleCreateTicket(interaction) {
   const embed = new EmbedBuilder()
     .setTitle(`🎫 Ticket #${ticketNumber.toString().padStart(4, '0')}`)
     .setDescription(
-      `Bienvenido ${member}, ¡tu ticket ha sido creado!\n\nDescribe tu problema y un miembro del staff te atenderá en breve.`
+      `¡Bienvenido ${member}! Tu ticket ha sido creado.\n\nDescribe tu problema y un miembro del staff te atenderá en breve.`
     )
     .addFields(
       { name: '👤 Abierto por', value: `${member}`, inline: true },
@@ -256,6 +257,43 @@ export async function handleCloseTicket(interaction) {
     .setTimestamp();
 
   await interaction.reply({ embeds: [closeEmbed] });
+
+  try {
+    const messages = await channel.messages.fetch({ limit: 100 });
+    const sorted = [...messages.values()].reverse();
+
+    const transcriptLines = sorted.map(m => {
+      const time = new Date(m.createdTimestamp).toLocaleString('es-ES');
+      const content = m.content || (m.embeds.length ? '[Embed]' : '[Sin contenido]');
+      return `[${time}] ${m.author.tag}: ${content}`;
+    });
+
+    const transcriptChannelId = getTranscriptChannel(guild.id);
+    if (transcriptChannelId) {
+      const transcriptChannel = guild.channels.cache.get(transcriptChannelId);
+      if (transcriptChannel) {
+        const ticketNum = ticket.ticketNumber.toString().padStart(4, '0');
+        const transcriptEmbed = new EmbedBuilder()
+          .setTitle(`📄 Transcripción — Ticket #${ticketNum}`)
+          .addFields(
+            { name: '👤 Abierto por', value: `<@${ticket.userId}>`, inline: true },
+            { name: '🔒 Cerrado por', value: member.user.tag, inline: true },
+            { name: '🛡️ Reclamado por', value: ticket.claimedByTag || 'Nadie', inline: true },
+            { name: '📅 Fecha de cierre', value: new Date().toLocaleString('es-ES'), inline: false }
+          )
+          .setColor(0x5865f2)
+          .setTimestamp();
+
+        const transcriptText = transcriptLines.join('\n').slice(0, 1900);
+        await transcriptChannel.send({ embeds: [transcriptEmbed] });
+        await transcriptChannel.send({
+          content: `\`\`\`\n${transcriptText || 'Sin mensajes.'}\n\`\`\``
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Error al generar transcripción:', err);
+  }
 
   deleteTicket(guild.id, channel.id);
 

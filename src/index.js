@@ -1,6 +1,6 @@
 import { getDiscordClient } from './discord.js';
 import { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
-import { addStaffRole } from './ticketConfig.js';
+import { addStaffRole, setTranscriptChannel } from './ticketConfig.js';
 import {
   handleTicketsPanel,
   handleCreateTicket,
@@ -30,11 +30,11 @@ const slashCommands = [
     .setDescription('Comprobar la latencia del bot'),
   new SlashCommandBuilder()
     .setName('lock')
-    .setDescription('Bloquear el canal actual para que los usuarios no puedan hablar')
+    .setDescription('Bloquear el canal actual')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   new SlashCommandBuilder()
     .setName('unlock')
-    .setDescription('Desbloquear el canal actual para que los usuarios puedan hablar')
+    .setDescription('Desbloquear el canal actual')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   new SlashCommandBuilder()
     .setName('help')
@@ -56,6 +56,17 @@ const slashCommands = [
         .addRoleOption(option =>
           option.setName('rol')
             .setDescription('El rol a agregar como staff')
+            .setRequired(true))),
+  new SlashCommandBuilder()
+    .setName('transcript')
+    .setDescription('Configurar canal de transcripciones de tickets')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addSubcommand(sub =>
+      sub.setName('channel')
+        .setDescription('Elegir el canal donde se enviarán las transcripciones')
+        .addChannelOption(option =>
+          option.setName('canal')
+            .setDescription('El canal para las transcripciones')
             .setRequired(true)))
 ];
 
@@ -67,6 +78,9 @@ async function registerSlashCommands(client) {
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
 
   try {
+    console.log('Limpiando comandos antiguos...');
+    await rest.put(Routes.applicationCommands(client.user.id), { body: [] });
+
     console.log('Registrando comandos slash...');
     await rest.put(
       Routes.applicationCommands(client.user.id),
@@ -88,13 +102,13 @@ async function main() {
       console.log(`¡Bot en línea como ${client.user.tag}!`);
       await registerSlashCommands(client);
       console.log('Comandos disponibles:');
-      console.log('  /say #canal <mensaje> - Enviar mensaje a un canal');
-      console.log('  /ping - Comprobar latencia');
-      console.log('  /lock - Bloquear canal');
-      console.log('  /unlock - Desbloquear canal');
-      console.log('  /help - Mostrar ayuda');
-      console.log('  /tickets panel - Publicar panel de tickets');
-      console.log('  /roleadd staff @rol - Agregar rol de staff');
+      console.log('  /say #canal <mensaje>');
+      console.log('  /ping');
+      console.log('  /lock / /unlock');
+      console.log('  /help');
+      console.log('  /tickets panel');
+      console.log('  /roleadd staff @rol');
+      console.log('  /transcript channel #canal');
     });
 
     client.on('interactionCreate', async (interaction) => {
@@ -155,6 +169,16 @@ async function main() {
                   ephemeral: true
                 });
               }
+            }
+            break;
+          case 'transcript':
+            if (interaction.options.getSubcommand() === 'channel') {
+              const canal = interaction.options.getChannel('canal');
+              setTranscriptChannel(interaction.guild.id, canal.id);
+              await interaction.reply({
+                content: `✅ Las transcripciones de tickets se enviarán a ${canal}.`,
+                ephemeral: true
+              });
             }
             break;
         }
@@ -272,22 +296,19 @@ async function handleSlashHelp(interaction) {
 **🤖 Comandos del Bot**
 
 **🎫 Sistema de Tickets:**
-\`/tickets panel\` - Publicar el panel de tickets en este canal *(solo admins)*
-\`/roleadd staff @rol\` - Agregar un rol de staff para gestionar tickets *(solo admins)*
+\`/tickets panel\` — Publicar el panel de tickets en este canal *(solo admins)*
+\`/roleadd staff @rol\` — Agregar un rol de staff para tickets *(solo admins)*
+\`/transcript channel #canal\` — Configurar canal de transcripciones *(solo admins)*
 
 **💬 Comandos Generales:**
-\`/say canal:<#canal> mensaje:<texto>\` - Enviar un mensaje a un canal *(solo admins)*
-\`/ping\` - Comprobar la latencia del bot
-\`/lock\` - Bloquear el canal actual *(solo admins)*
-\`/unlock\` - Desbloquear el canal actual *(solo admins)*
-\`/help\` - Mostrar esta ayuda
+\`/say #canal <mensaje>\` — Enviar un mensaje a un canal *(solo admins)*
+\`/ping\` — Comprobar la latencia del bot
+\`/lock\` — Bloquear el canal actual *(solo admins)*
+\`/unlock\` — Desbloquear el canal actual *(solo admins)*
+\`/help\` — Mostrar esta ayuda
 
-**Prefijo de comandos:** \`!\`
-\`!say #canal <mensaje>\` - Enviar mensaje a un canal
-\`!ping\` - Comprobar latencia
-\`!lock\` - Bloquear canal
-\`!unlock\` - Desbloquear canal
-\`!help\` - Mostrar ayuda
+**Prefijo \`!\`:**
+\`!say\` • \`!ping\` • \`!lock\` • \`!unlock\` • \`!help\`
 `;
 
   await interaction.reply({ content: helpMessage, ephemeral: true });
@@ -313,7 +334,7 @@ async function handleSay(message, args) {
     await message.reply(`✅ Mensaje enviado a ${targetChannel}!`);
   } catch (error) {
     console.error('Error al enviar al canal:', error);
-    await message.reply(`❌ No se pudo enviar el mensaje a ${targetChannel}. Verifica los permisos del bot.`);
+    await message.reply(`❌ No se pudo enviar el mensaje. Verifica los permisos del bot.`);
   }
 }
 
@@ -355,17 +376,11 @@ async function handleHelp(message) {
 **🤖 Comandos del Bot**
 
 **🎫 Sistema de Tickets:**
-\`/tickets panel\` - Publicar el panel de tickets *(solo admins)*
-\`/roleadd staff @rol\` - Agregar un rol de staff *(solo admins)*
+\`/tickets panel\` — Panel de tickets *(solo admins)*
+\`/roleadd staff @rol\` — Agregar staff *(solo admins)*
+\`/transcript channel #canal\` — Canal de transcripciones *(solo admins)*
 
-**💬 Comandos Generales:**
-\`/say canal:<#canal> mensaje:<texto>\` - Enviar mensaje a un canal *(solo admins)*
-\`/ping\` - Comprobar latencia
-\`/lock\` - Bloquear canal *(solo admins)*
-\`/unlock\` - Desbloquear canal *(solo admins)*
-\`/help\` - Mostrar ayuda
-
-**Prefijo:** \`!\`
+**💬 Generales:**
 \`!say #canal <mensaje>\` • \`!ping\` • \`!lock\` • \`!unlock\` • \`!help\`
 `;
 
