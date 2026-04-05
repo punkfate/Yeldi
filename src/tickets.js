@@ -87,24 +87,12 @@ export async function handleCreateTicket(interaction) {
     });
   }
 
-  let category = guild.channels.cache.find(
-    (c) => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === 'tickets'
-  );
-
-  if (!category) {
-    category = await guild.channels.create({
-      name: 'Tickets',
-      type: ChannelType.GuildCategory,
-      permissionOverwrites: [
-        { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
-      ],
-    });
-  }
+  const categoryId = interaction.channel.parentId || null;
 
   const ticketChannel = await guild.channels.create({
     name: channelName,
     type: ChannelType.GuildText,
-    parent: category.id,
+    parent: categoryId,
     permissionOverwrites,
   });
 
