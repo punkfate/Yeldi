@@ -1,6 +1,14 @@
 import { getDiscordClient } from './discord.js';
 import { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
-import express from 'express';
+import { addStaffRole } from './ticketConfig.js';
+import {
+  handleTicketsPanel,
+  handleCreateTicket,
+  handleClaimTicket,
+  handleUnclaimTicket,
+  handleCloseTicket
+} from './tickets.js';
+import './web.js';
 
 const PREFIX = '!';
 
@@ -9,7 +17,7 @@ const slashCommands = [
     .setName('send')
     .setDescription('Send a personalized direct message to a user')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addUserOption(option => 
+    .addUserOption(option =>
       option.setName('user')
         .setDescription('The user to send the DM to')
         .setRequired(true))
@@ -51,7 +59,25 @@ const slashCommands = [
   new SlashCommandBuilder()
     .setName('unlock')
     .setDescription('Unlock the current channel to allow users to talk')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+  new SlashCommandBuilder()
+    .setName('tickets')
+    .setDescription('Ticket system commands')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addSubcommand(sub =>
+      sub.setName('panel')
+        .setDescription('Post the ticket panel in this channel')),
+  new SlashCommandBuilder()
+    .setName('roleadd')
+    .setDescription('Manage role permissions')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addSubcommand(sub =>
+      sub.setName('staff')
+        .setDescription('Add a staff role that can manage tickets')
+        .addRoleOption(option =>
+          option.setName('role')
+            .setDescription('The role to add as staff')
+            .setRequired(true)))
 ];
 
 function isAdmin(member) {
@@ -60,7 +86,7 @@ function isAdmin(member) {
 
 async function registerSlashCommands(client) {
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
-  
+
   try {
     console.log('Registering slash commands...');
     await rest.put(
@@ -75,10 +101,10 @@ async function registerSlashCommands(client) {
 
 async function main() {
   console.log('Starting Discord bot...');
-  
+
   try {
     const client = await getDiscordClient();
-    
+
     client.on('ready', async () => {
       console.log(`Bot is online as ${client.user.tag}!`);
       await registerSlashCommands(client);
@@ -88,12 +114,32 @@ async function main() {
       console.log('  /announce or !announce <message> - Send to current channel');
       console.log('  /ping - Check bot latency');
       console.log('  /help or !help - Show all commands');
+      console.log('  /tickets panel - Post ticket panel in channel');
+      console.log('  /roleadd staff @role - Add a staff role for tickets');
     });
 
     client.on('interactionCreate', async (interaction) => {
-      if (!interaction.isChatInputCommand()) return;
-
       try {
+        if (interaction.isButton()) {
+          switch (interaction.customId) {
+            case 'create_ticket':
+              await handleCreateTicket(interaction);
+              break;
+            case 'claim_ticket':
+              await handleClaimTicket(interaction);
+              break;
+            case 'unclaim_ticket':
+              await handleUnclaimTicket(interaction);
+              break;
+            case 'close_ticket':
+              await handleCloseTicket(interaction);
+              break;
+          }
+          return;
+        }
+
+        if (!interaction.isChatInputCommand()) return;
+
         switch (interaction.commandName) {
           case 'send':
             await handleSlashSendDM(interaction);
@@ -116,14 +162,40 @@ async function main() {
           case 'help':
             await handleSlashHelp(interaction);
             break;
+          case 'tickets':
+            if (interaction.options.getSubcommand() === 'panel') {
+              await handleTicketsPanel(interaction);
+            }
+            break;
+          case 'roleadd':
+            if (interaction.options.getSubcommand() === 'staff') {
+              const role = interaction.options.getRole('role');
+              const added = addStaffRole(interaction.guild.id, role.id);
+              if (added) {
+                await interaction.reply({
+                  content: `✅ ${role} has been added as a staff role for tickets.`,
+                  ephemeral: true
+                });
+              } else {
+                await interaction.reply({
+                  content: `❌ ${role} is already a staff role.`,
+                  ephemeral: true
+                });
+              }
+            }
+            break;
         }
       } catch (error) {
-        console.error('Error handling slash command:', error);
+        console.error('Error handling interaction:', error);
         const reply = { content: 'An error occurred while processing your command.', ephemeral: true };
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp(reply);
-        } else {
-          await interaction.reply(reply);
+        try {
+          if (interaction.replied || interaction.deferred) {
+            await interaction.followUp(reply);
+          } else {
+            await interaction.reply(reply);
+          }
+        } catch (e) {
+          console.error('Failed to send error reply:', e);
         }
       }
     });
@@ -135,13 +207,11 @@ async function main() {
       const args = message.content.slice(PREFIX.length).trim().split(/ +/);
       const command = args.shift().toLowerCase();
 
-      // Ping command is available to everyone
       if (command === 'ping') {
         await handlePing(message);
         return;
       }
 
-      // All other commands require admin
       if (!message.member || !isAdmin(message.member)) {
         await message.reply('You need Administrator permissions to use this bot.');
         return;
@@ -177,7 +247,7 @@ async function main() {
     });
 
     console.log('Bot is now listening for commands...');
-    
+
   } catch (error) {
     console.error('Failed to start bot:', error);
     process.exit(1);
@@ -263,6 +333,8 @@ async function handleSlashHelp(interaction) {
 \`/ping\` - Check bot latency
 \`/lock\` - Lock channel (admin only)
 \`/unlock\` - Unlock channel (admin only)
+\`/tickets panel\` - Post the ticket panel in this channel (admin only)
+\`/roleadd staff @role\` - Add a staff role for tickets (admin only)
 \`/help\` - Show this help
 
 **Prefix Commands:**
@@ -284,14 +356,14 @@ async function handleSlashHelp(interaction) {
 
 async function handleSendDM(message, args) {
   const targetUser = message.mentions.users.first();
-  
+
   if (!targetUser) {
     await message.reply('Please mention a user to send a DM to. Usage: `!send @user Your message here`');
     return;
   }
 
   const personalizedMessage = args.slice(1).join(' ');
-  
+
   if (!personalizedMessage) {
     await message.reply('Please provide a message. Usage: `!send @user Your message here`');
     return;
@@ -311,14 +383,14 @@ async function handleSendDM(message, args) {
 
 async function handleSayChannel(message, args) {
   const targetChannel = message.mentions.channels.first();
-  
+
   if (!targetChannel) {
     await message.reply('Please mention a channel. Usage: `!say #channel Your message here`');
     return;
   }
 
   const personalizedMessage = args.slice(1).join(' ');
-  
+
   if (!personalizedMessage) {
     await message.reply('Please provide a message. Usage: `!say #channel Your message here`');
     return;
@@ -335,7 +407,7 @@ async function handleSayChannel(message, args) {
 
 async function handleAnnounce(message, args) {
   const personalizedMessage = args.join(' ');
-  
+
   if (!personalizedMessage) {
     await message.reply('Please provide a message. Usage: `!announce Your message here`');
     return;
@@ -388,6 +460,8 @@ async function handleHelp(message) {
 \`/ping\` - Check bot latency
 \`/lock\` - Lock channel (admin only)
 \`/unlock\` - Unlock channel (admin only)
+\`/tickets panel\` - Post the ticket panel (admin only)
+\`/roleadd staff @role\` - Add staff role for tickets (admin only)
 \`/help\` - Show this help
 
 **Prefix Commands:**
@@ -406,7 +480,5 @@ async function handleHelp(message) {
 
   await message.reply(helpMessage);
 }
-
-import './web.js';
 
 main();
