@@ -35,8 +35,7 @@ export async function handleTicketsPanel(interaction) {
       .setStyle(ButtonStyle.Primary)
   );
 
-  await interaction.channel.send({ embeds: [embed], components: [row] });
-  await interaction.reply({ content: '✅ ¡Panel de tickets publicado!', ephemeral: true });
+  await interaction.reply({ embeds: [embed], components: [row] });
 }
 
 export async function handleCreateTicket(interaction) {
