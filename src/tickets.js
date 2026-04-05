@@ -18,24 +18,24 @@ import {
 
 export async function handleTicketsPanel(interaction) {
   const embed = new EmbedBuilder()
-    .setTitle('🎫 Support Tickets')
+    .setTitle('🎫 Sistema de Tickets')
     .setDescription(
-      'Need help? Click the button below to open a support ticket.\n\nA private channel will be created just for you.'
+      '¿Necesitas ayuda? Haz clic en el botón de abajo para abrir un ticket de soporte.\n\nSe creará un canal privado exclusivamente para ti.'
     )
     .setColor(0x5865f2)
-    .setFooter({ text: 'Support Ticket System' })
+    .setFooter({ text: 'Sistema de Soporte' })
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('create_ticket')
-      .setLabel('Open Ticket')
+      .setLabel('Abrir Ticket')
       .setEmoji('🎫')
       .setStyle(ButtonStyle.Primary)
   );
 
   await interaction.channel.send({ embeds: [embed], components: [row] });
-  await interaction.reply({ content: '✅ Ticket panel posted!', ephemeral: true });
+  await interaction.reply({ content: '✅ ¡Panel de tickets publicado!', ephemeral: true });
 }
 
 export async function handleCreateTicket(interaction) {
@@ -54,7 +54,7 @@ export async function handleCreateTicket(interaction) {
     const existing = guild.channels.cache.get(existingTicket[0]);
     if (existing) {
       await interaction.editReply({
-        content: `❌ You already have an open ticket: ${existing}`,
+        content: `❌ Ya tienes un ticket abierto: ${existing}`,
       });
       return;
     }
@@ -113,12 +113,12 @@ export async function handleCreateTicket(interaction) {
   const embed = new EmbedBuilder()
     .setTitle(`🎫 Ticket #${ticketNumber.toString().padStart(4, '0')}`)
     .setDescription(
-      `Welcome ${member}, your ticket has been created!\n\nPlease describe your issue and a staff member will assist you shortly.`
+      `Bienvenido ${member}, ¡tu ticket ha sido creado!\n\nDescribe tu problema y un miembro del staff te atenderá en breve.`
     )
     .addFields(
-      { name: '👤 Opened by', value: `${member}`, inline: true },
-      { name: '📋 Status', value: '🟢 Open', inline: true },
-      { name: '🛡️ Claimed by', value: 'Nobody', inline: true }
+      { name: '👤 Abierto por', value: `${member}`, inline: true },
+      { name: '📋 Estado', value: '🟢 Abierto', inline: true },
+      { name: '🛡️ Reclamado por', value: 'Nadie', inline: true }
     )
     .setColor(0x57f287)
     .setTimestamp();
@@ -126,17 +126,17 @@ export async function handleCreateTicket(interaction) {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('claim_ticket')
-      .setLabel('Claim')
+      .setLabel('Reclamar')
       .setEmoji('✋')
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId('unclaim_ticket')
-      .setLabel('Unclaim')
+      .setLabel('Liberar')
       .setEmoji('🔓')
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('close_ticket')
-      .setLabel('Close Ticket')
+      .setLabel('Cerrar Ticket')
       .setEmoji('🔒')
       .setStyle(ButtonStyle.Danger)
   );
@@ -144,7 +144,7 @@ export async function handleCreateTicket(interaction) {
   await ticketChannel.send({ content: `${member}`, embeds: [embed], components: [row] });
 
   await interaction.editReply({
-    content: `✅ Your ticket has been created: ${ticketChannel}`,
+    content: `✅ Tu ticket ha sido creado: ${ticketChannel}`,
   });
 }
 
@@ -155,7 +155,7 @@ export async function handleClaimTicket(interaction) {
   const ticket = getTicket(guild.id, channel.id);
 
   if (!ticket) {
-    await interaction.reply({ content: '❌ This is not a ticket channel.', ephemeral: true });
+    await interaction.reply({ content: '❌ Este no es un canal de ticket.', ephemeral: true });
     return;
   }
 
@@ -165,26 +165,26 @@ export async function handleClaimTicket(interaction) {
     guildConfig.staffRoles.some((r) => member.roles.cache.has(r));
 
   if (!isStaff) {
-    await interaction.reply({ content: '❌ Only staff members can claim tickets.', ephemeral: true });
+    await interaction.reply({ content: '❌ Solo el staff puede reclamar tickets.', ephemeral: true });
     return;
   }
 
   if (ticket.claimedBy === member.user.id) {
-    await interaction.reply({ content: '❌ You already claimed this ticket.', ephemeral: true });
+    await interaction.reply({ content: '❌ Ya reclamaste este ticket.', ephemeral: true });
     return;
   }
 
   claimTicket(guild.id, channel.id, member.user.id, member.user.tag);
 
-  await channel.setName(channel.name.replace('ticket-', 'claimed-'));
+  await channel.setName(channel.name.replace('ticket-', 'reclamado-'));
 
   const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-    .spliceFields(1, 1, { name: '📋 Status', value: '🟡 Claimed', inline: true })
-    .spliceFields(2, 1, { name: '🛡️ Claimed by', value: `${member}`, inline: true })
+    .spliceFields(1, 1, { name: '📋 Estado', value: '🟡 Reclamado', inline: true })
+    .spliceFields(2, 1, { name: '🛡️ Reclamado por', value: `${member}`, inline: true })
     .setColor(0xfee75c);
 
   await interaction.update({ embeds: [updatedEmbed], components: interaction.message.components });
-  await channel.send(`✋ **${member.user.tag}** has claimed this ticket.`);
+  await channel.send(`✋ **${member.user.tag}** ha reclamado este ticket.`);
 }
 
 export async function handleUnclaimTicket(interaction) {
@@ -194,7 +194,7 @@ export async function handleUnclaimTicket(interaction) {
   const ticket = getTicket(guild.id, channel.id);
 
   if (!ticket) {
-    await interaction.reply({ content: '❌ This is not a ticket channel.', ephemeral: true });
+    await interaction.reply({ content: '❌ Este no es un canal de ticket.', ephemeral: true });
     return;
   }
 
@@ -204,27 +204,27 @@ export async function handleUnclaimTicket(interaction) {
     guildConfig.staffRoles.some((r) => member.roles.cache.has(r));
 
   if (!isStaff) {
-    await interaction.reply({ content: '❌ Only staff members can unclaim tickets.', ephemeral: true });
+    await interaction.reply({ content: '❌ Solo el staff puede liberar tickets.', ephemeral: true });
     return;
   }
 
   if (!ticket.claimedBy) {
-    await interaction.reply({ content: '❌ This ticket is not claimed.', ephemeral: true });
+    await interaction.reply({ content: '❌ Este ticket no está reclamado.', ephemeral: true });
     return;
   }
 
   unclaimTicket(guild.id, channel.id);
 
-  const newName = channel.name.replace('claimed-', 'ticket-');
+  const newName = channel.name.replace('reclamado-', 'ticket-');
   await channel.setName(newName);
 
   const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-    .spliceFields(1, 1, { name: '📋 Status', value: '🟢 Open', inline: true })
-    .spliceFields(2, 1, { name: '🛡️ Claimed by', value: 'Nobody', inline: true })
+    .spliceFields(1, 1, { name: '📋 Estado', value: '🟢 Abierto', inline: true })
+    .spliceFields(2, 1, { name: '🛡️ Reclamado por', value: 'Nadie', inline: true })
     .setColor(0x57f287);
 
   await interaction.update({ embeds: [updatedEmbed], components: interaction.message.components });
-  await channel.send(`🔓 **${member.user.tag}** has unclaimed this ticket.`);
+  await channel.send(`🔓 **${member.user.tag}** ha liberado este ticket.`);
 }
 
 export async function handleCloseTicket(interaction) {
@@ -234,7 +234,7 @@ export async function handleCloseTicket(interaction) {
   const ticket = getTicket(guild.id, channel.id);
 
   if (!ticket) {
-    await interaction.reply({ content: '❌ This is not a ticket channel.', ephemeral: true });
+    await interaction.reply({ content: '❌ Este no es un canal de ticket.', ephemeral: true });
     return;
   }
 
@@ -245,13 +245,13 @@ export async function handleCloseTicket(interaction) {
     ticket.userId === member.user.id;
 
   if (!isStaff) {
-    await interaction.reply({ content: '❌ You do not have permission to close this ticket.', ephemeral: true });
+    await interaction.reply({ content: '❌ No tienes permiso para cerrar este ticket.', ephemeral: true });
     return;
   }
 
   const closeEmbed = new EmbedBuilder()
-    .setTitle('🔒 Ticket Closing')
-    .setDescription(`This ticket is being closed by **${member.user.tag}**.\nChannel will be deleted in 5 seconds.`)
+    .setTitle('🔒 Cerrando Ticket')
+    .setDescription(`Este ticket está siendo cerrado por **${member.user.tag}**.\nEl canal se eliminará en 5 segundos.`)
     .setColor(0xed4245)
     .setTimestamp();
 
@@ -261,9 +261,9 @@ export async function handleCloseTicket(interaction) {
 
   setTimeout(async () => {
     try {
-      await channel.delete(`Ticket closed by ${member.user.tag}`);
+      await channel.delete(`Ticket cerrado por ${member.user.tag}`);
     } catch (err) {
-      console.error('Failed to delete ticket channel:', err);
+      console.error('Error al eliminar el canal del ticket:', err);
     }
   }, 5000);
 }

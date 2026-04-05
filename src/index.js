@@ -14,69 +14,48 @@ const PREFIX = '!';
 
 const slashCommands = [
   new SlashCommandBuilder()
-    .setName('send')
-    .setDescription('Send a personalized direct message to a user')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addUserOption(option =>
-      option.setName('user')
-        .setDescription('The user to send the DM to')
-        .setRequired(true))
-    .addStringOption(option =>
-      option.setName('message')
-        .setDescription('The message to send')
-        .setRequired(true)),
-  new SlashCommandBuilder()
     .setName('say')
-    .setDescription('Send a message to a specific channel')
+    .setDescription('Enviar un mensaje a un canal específico')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addChannelOption(option =>
-      option.setName('channel')
-        .setDescription('The channel to send the message to')
+      option.setName('canal')
+        .setDescription('El canal donde enviar el mensaje')
         .setRequired(true))
     .addStringOption(option =>
-      option.setName('message')
-        .setDescription('The message to send')
+      option.setName('mensaje')
+        .setDescription('El mensaje a enviar')
         .setRequired(true)),
-  new SlashCommandBuilder()
-    .setName('announce')
-    .setDescription('Send a message to the current channel')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addStringOption(option =>
-      option.setName('message')
-        .setDescription('The message to send')
-        .setRequired(true)),
-  new SlashCommandBuilder()
-    .setName('help')
-    .setDescription('Show all available commands')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   new SlashCommandBuilder()
     .setName('ping')
-    .setDescription('Check the bot\'s latency'),
+    .setDescription('Comprobar la latencia del bot'),
   new SlashCommandBuilder()
     .setName('lock')
-    .setDescription('Lock the current channel to prevent users from talking')
+    .setDescription('Bloquear el canal actual para que los usuarios no puedan hablar')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   new SlashCommandBuilder()
     .setName('unlock')
-    .setDescription('Unlock the current channel to allow users to talk')
+    .setDescription('Desbloquear el canal actual para que los usuarios puedan hablar')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   new SlashCommandBuilder()
+    .setName('help')
+    .setDescription('Mostrar todos los comandos disponibles'),
+  new SlashCommandBuilder()
     .setName('tickets')
-    .setDescription('Ticket system commands')
+    .setDescription('Comandos del sistema de tickets')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addSubcommand(sub =>
       sub.setName('panel')
-        .setDescription('Post the ticket panel in this channel')),
+        .setDescription('Publicar el panel de tickets en este canal')),
   new SlashCommandBuilder()
     .setName('roleadd')
-    .setDescription('Manage role permissions')
+    .setDescription('Gestionar permisos de roles')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addSubcommand(sub =>
       sub.setName('staff')
-        .setDescription('Add a staff role that can manage tickets')
+        .setDescription('Agregar un rol de staff para gestionar tickets')
         .addRoleOption(option =>
-          option.setName('role')
-            .setDescription('The role to add as staff')
+          option.setName('rol')
+            .setDescription('El rol a agregar como staff')
             .setRequired(true)))
 ];
 
@@ -88,34 +67,34 @@ async function registerSlashCommands(client) {
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
 
   try {
-    console.log('Registering slash commands...');
+    console.log('Registrando comandos slash...');
     await rest.put(
       Routes.applicationCommands(client.user.id),
       { body: slashCommands.map(cmd => cmd.toJSON()) }
     );
-    console.log('Slash commands registered successfully!');
+    console.log('¡Comandos slash registrados correctamente!');
   } catch (error) {
-    console.error('Failed to register slash commands:', error);
+    console.error('Error al registrar los comandos slash:', error);
   }
 }
 
 async function main() {
-  console.log('Starting Discord bot...');
+  console.log('Iniciando bot de Discord...');
 
   try {
     const client = await getDiscordClient();
 
     client.on('ready', async () => {
-      console.log(`Bot is online as ${client.user.tag}!`);
+      console.log(`¡Bot en línea como ${client.user.tag}!`);
       await registerSlashCommands(client);
-      console.log('Available commands (prefix ! or slash /):');
-      console.log('  /send or !send @user <message> - Send a personalized DM');
-      console.log('  /say or !say #channel <message> - Send to a channel');
-      console.log('  /announce or !announce <message> - Send to current channel');
-      console.log('  /ping - Check bot latency');
-      console.log('  /help or !help - Show all commands');
-      console.log('  /tickets panel - Post ticket panel in channel');
-      console.log('  /roleadd staff @role - Add a staff role for tickets');
+      console.log('Comandos disponibles:');
+      console.log('  /say #canal <mensaje> - Enviar mensaje a un canal');
+      console.log('  /ping - Comprobar latencia');
+      console.log('  /lock - Bloquear canal');
+      console.log('  /unlock - Desbloquear canal');
+      console.log('  /help - Mostrar ayuda');
+      console.log('  /tickets panel - Publicar panel de tickets');
+      console.log('  /roleadd staff @rol - Agregar rol de staff');
     });
 
     client.on('interactionCreate', async (interaction) => {
@@ -141,14 +120,8 @@ async function main() {
         if (!interaction.isChatInputCommand()) return;
 
         switch (interaction.commandName) {
-          case 'send':
-            await handleSlashSendDM(interaction);
-            break;
           case 'say':
-            await handleSlashSayChannel(interaction);
-            break;
-          case 'announce':
-            await handleSlashAnnounce(interaction);
+            await handleSlashSay(interaction);
             break;
           case 'ping':
             await handleSlashPing(interaction);
@@ -169,16 +142,16 @@ async function main() {
             break;
           case 'roleadd':
             if (interaction.options.getSubcommand() === 'staff') {
-              const role = interaction.options.getRole('role');
+              const role = interaction.options.getRole('rol');
               const added = addStaffRole(interaction.guild.id, role.id);
               if (added) {
                 await interaction.reply({
-                  content: `✅ ${role} has been added as a staff role for tickets.`,
+                  content: `✅ ${role} ha sido agregado como rol de staff para los tickets.`,
                   ephemeral: true
                 });
               } else {
                 await interaction.reply({
-                  content: `❌ ${role} is already a staff role.`,
+                  content: `❌ ${role} ya es un rol de staff.`,
                   ephemeral: true
                 });
               }
@@ -186,8 +159,8 @@ async function main() {
             break;
         }
       } catch (error) {
-        console.error('Error handling interaction:', error);
-        const reply = { content: 'An error occurred while processing your command.', ephemeral: true };
+        console.error('Error al manejar la interacción:', error);
+        const reply = { content: 'Ocurrió un error al procesar tu comando.', ephemeral: true };
         try {
           if (interaction.replied || interaction.deferred) {
             await interaction.followUp(reply);
@@ -195,7 +168,7 @@ async function main() {
             await interaction.reply(reply);
           }
         } catch (e) {
-          console.error('Failed to send error reply:', e);
+          console.error('Error al enviar respuesta de error:', e);
         }
       }
     });
@@ -213,20 +186,14 @@ async function main() {
       }
 
       if (!message.member || !isAdmin(message.member)) {
-        await message.reply('You need Administrator permissions to use this bot.');
+        await message.reply('Necesitas permisos de Administrador para usar este bot.');
         return;
       }
 
       try {
         switch (command) {
-          case 'send':
-            await handleSendDM(message, args);
-            break;
           case 'say':
-            await handleSayChannel(message, args);
-            break;
-          case 'announce':
-            await handleAnnounce(message, args);
+            await handleSay(message, args);
             break;
           case 'lock':
             await handleLock(message);
@@ -238,60 +205,38 @@ async function main() {
             await handleHelp(message);
             break;
           default:
-            await message.reply(`Unknown command: \`${command}\`. Use \`!help\` or \`/help\` to see available commands.`);
+            await message.reply(`Comando desconocido: \`${command}\`. Usa \`!help\` o \`/help\` para ver los comandos disponibles.`);
         }
       } catch (error) {
-        console.error('Error handling command:', error);
-        await message.reply('An error occurred while processing your command.');
+        console.error('Error al manejar el comando:', error);
+        await message.reply('Ocurrió un error al procesar tu comando.');
       }
     });
 
-    console.log('Bot is now listening for commands...');
+    console.log('Bot escuchando comandos...');
 
   } catch (error) {
-    console.error('Failed to start bot:', error);
+    console.error('Error al iniciar el bot:', error);
     process.exit(1);
   }
 }
 
-async function handleSlashSendDM(interaction) {
-  const targetUser = interaction.options.getUser('user');
-  const personalizedMessage = interaction.options.getString('message');
+async function handleSlashSay(interaction) {
+  const targetChannel = interaction.options.getChannel('canal');
+  const mensaje = interaction.options.getString('mensaje');
 
   try {
-    await targetUser.send(personalizedMessage);
-    await interaction.reply({ content: `Message sent to ${targetUser.tag}!`, ephemeral: true });
+    await targetChannel.send(mensaje);
+    await interaction.reply({ content: `✅ Mensaje enviado a ${targetChannel}!`, ephemeral: true });
   } catch (error) {
-    if (error.code === 50007) {
-      await interaction.reply({ content: `Cannot send DM to ${targetUser.tag}. They may have DMs disabled.`, ephemeral: true });
-    } else {
-      throw error;
-    }
+    console.error('Error al enviar al canal:', error);
+    await interaction.reply({ content: `❌ No se pudo enviar el mensaje a ${targetChannel}. Verifica los permisos del bot.`, ephemeral: true });
   }
-}
-
-async function handleSlashSayChannel(interaction) {
-  const targetChannel = interaction.options.getChannel('channel');
-  const personalizedMessage = interaction.options.getString('message');
-
-  try {
-    await targetChannel.send(personalizedMessage);
-    await interaction.reply({ content: `Message sent to ${targetChannel}!`, ephemeral: true });
-  } catch (error) {
-    console.error('Failed to send to channel:', error);
-    await interaction.reply({ content: `Failed to send message to ${targetChannel}. Check bot permissions.`, ephemeral: true });
-  }
-}
-
-async function handleSlashAnnounce(interaction) {
-  const personalizedMessage = interaction.options.getString('message');
-  await interaction.channel.send(personalizedMessage);
-  await interaction.reply({ content: 'Message announced!', ephemeral: true });
 }
 
 async function handleSlashPing(interaction) {
   const ping = interaction.client.ws.ping;
-  await interaction.reply(`🏓 Pong! Bot latency: **${ping}ms**`);
+  await interaction.reply(`🏓 ¡Pong! Latencia del bot: **${ping}ms**`);
 }
 
 async function handleSlashLock(interaction) {
@@ -301,10 +246,10 @@ async function handleSlashLock(interaction) {
       channel.guild.roles.everyone,
       { SendMessages: false }
     );
-    await interaction.reply({ content: `🔒 Channel locked! Users cannot talk.`, ephemeral: true });
+    await interaction.reply({ content: `🔒 ¡Canal bloqueado! Los usuarios no pueden hablar.`, ephemeral: true });
   } catch (error) {
-    console.error('Failed to lock channel:', error);
-    await interaction.reply({ content: 'Failed to lock the channel. Check bot permissions.', ephemeral: true });
+    console.error('Error al bloquear el canal:', error);
+    await interaction.reply({ content: '❌ No se pudo bloquear el canal. Verifica los permisos del bot.', ephemeral: true });
   }
 }
 
@@ -315,110 +260,66 @@ async function handleSlashUnlock(interaction) {
       channel.guild.roles.everyone,
       { SendMessages: null }
     );
-    await interaction.reply({ content: `🔓 Channel unlocked! Users can now talk.`, ephemeral: true });
+    await interaction.reply({ content: `🔓 ¡Canal desbloqueado! Los usuarios ya pueden hablar.`, ephemeral: true });
   } catch (error) {
-    console.error('Failed to unlock channel:', error);
-    await interaction.reply({ content: 'Failed to unlock the channel. Check bot permissions.', ephemeral: true });
+    console.error('Error al desbloquear el canal:', error);
+    await interaction.reply({ content: '❌ No se pudo desbloquear el canal. Verifica los permisos del bot.', ephemeral: true });
   }
 }
 
 async function handleSlashHelp(interaction) {
   const helpMessage = `
-**Discord Bot Commands**
+**🤖 Comandos del Bot**
 
-**Slash Commands:**
-\`/send user:<@user> message:<text>\` - Send a DM to a user
-\`/say channel:<#channel> message:<text>\` - Send to a channel
-\`/announce message:<text>\` - Send to current channel
-\`/ping\` - Check bot latency
-\`/lock\` - Lock channel (admin only)
-\`/unlock\` - Unlock channel (admin only)
-\`/tickets panel\` - Post the ticket panel in this channel (admin only)
-\`/roleadd staff @role\` - Add a staff role for tickets (admin only)
-\`/help\` - Show this help
+**🎫 Sistema de Tickets:**
+\`/tickets panel\` - Publicar el panel de tickets en este canal *(solo admins)*
+\`/roleadd staff @rol\` - Agregar un rol de staff para gestionar tickets *(solo admins)*
 
-**Prefix Commands:**
-\`!send @user <message>\` - Send a DM to a user
-\`!say #channel <message>\` - Send to a channel
-\`!announce <message>\` - Send to current channel
-\`!ping\` - Check bot latency
-\`!lock\` - Lock channel (admin only)
-\`!unlock\` - Unlock channel (admin only)
-\`!help\` - Show this help
+**💬 Comandos Generales:**
+\`/say canal:<#canal> mensaje:<texto>\` - Enviar un mensaje a un canal *(solo admins)*
+\`/ping\` - Comprobar la latencia del bot
+\`/lock\` - Bloquear el canal actual *(solo admins)*
+\`/unlock\` - Desbloquear el canal actual *(solo admins)*
+\`/help\` - Mostrar esta ayuda
 
-**Tips:**
-- Use Discord formatting (bold, italic, etc.)
-- Mention users with @username for personalization
+**Prefijo de comandos:** \`!\`
+\`!say #canal <mensaje>\` - Enviar mensaje a un canal
+\`!ping\` - Comprobar latencia
+\`!lock\` - Bloquear canal
+\`!unlock\` - Desbloquear canal
+\`!help\` - Mostrar ayuda
 `;
 
   await interaction.reply({ content: helpMessage, ephemeral: true });
 }
 
-async function handleSendDM(message, args) {
-  const targetUser = message.mentions.users.first();
-
-  if (!targetUser) {
-    await message.reply('Please mention a user to send a DM to. Usage: `!send @user Your message here`');
-    return;
-  }
-
-  const personalizedMessage = args.slice(1).join(' ');
-
-  if (!personalizedMessage) {
-    await message.reply('Please provide a message. Usage: `!send @user Your message here`');
-    return;
-  }
-
-  try {
-    await targetUser.send(personalizedMessage);
-    await message.reply(`Message sent to ${targetUser.tag}!`);
-  } catch (error) {
-    if (error.code === 50007) {
-      await message.reply(`Cannot send DM to ${targetUser.tag}. They may have DMs disabled.`);
-    } else {
-      throw error;
-    }
-  }
-}
-
-async function handleSayChannel(message, args) {
+async function handleSay(message, args) {
   const targetChannel = message.mentions.channels.first();
 
   if (!targetChannel) {
-    await message.reply('Please mention a channel. Usage: `!say #channel Your message here`');
+    await message.reply('Por favor menciona un canal. Uso: `!say #canal Tu mensaje aquí`');
     return;
   }
 
-  const personalizedMessage = args.slice(1).join(' ');
+  const texto = args.slice(1).join(' ');
 
-  if (!personalizedMessage) {
-    await message.reply('Please provide a message. Usage: `!say #channel Your message here`');
+  if (!texto) {
+    await message.reply('Por favor proporciona un mensaje. Uso: `!say #canal Tu mensaje aquí`');
     return;
   }
 
   try {
-    await targetChannel.send(personalizedMessage);
-    await message.reply(`Message sent to ${targetChannel}!`);
+    await targetChannel.send(texto);
+    await message.reply(`✅ Mensaje enviado a ${targetChannel}!`);
   } catch (error) {
-    console.error('Failed to send to channel:', error);
-    await message.reply(`Failed to send message to ${targetChannel}. Check bot permissions.`);
+    console.error('Error al enviar al canal:', error);
+    await message.reply(`❌ No se pudo enviar el mensaje a ${targetChannel}. Verifica los permisos del bot.`);
   }
-}
-
-async function handleAnnounce(message, args) {
-  const personalizedMessage = args.join(' ');
-
-  if (!personalizedMessage) {
-    await message.reply('Please provide a message. Usage: `!announce Your message here`');
-    return;
-  }
-
-  await message.channel.send(personalizedMessage);
 }
 
 async function handlePing(message) {
   const ping = message.client.ws.ping;
-  await message.reply(`🏓 Pong! Bot latency: **${ping}ms**`);
+  await message.reply(`🏓 ¡Pong! Latencia del bot: **${ping}ms**`);
 }
 
 async function handleLock(message) {
@@ -428,10 +329,10 @@ async function handleLock(message) {
       channel.guild.roles.everyone,
       { SendMessages: false }
     );
-    await message.reply('🔒 Channel locked! Users cannot talk.');
+    await message.reply('🔒 ¡Canal bloqueado! Los usuarios no pueden hablar.');
   } catch (error) {
-    console.error('Failed to lock channel:', error);
-    await message.reply('Failed to lock the channel. Check bot permissions.');
+    console.error('Error al bloquear el canal:', error);
+    await message.reply('❌ No se pudo bloquear el canal. Verifica los permisos del bot.');
   }
 }
 
@@ -442,40 +343,30 @@ async function handleUnlock(message) {
       channel.guild.roles.everyone,
       { SendMessages: null }
     );
-    await message.reply('🔓 Channel unlocked! Users can now talk.');
+    await message.reply('🔓 ¡Canal desbloqueado! Los usuarios ya pueden hablar.');
   } catch (error) {
-    console.error('Failed to unlock channel:', error);
-    await message.reply('Failed to unlock the channel. Check bot permissions.');
+    console.error('Error al desbloquear el canal:', error);
+    await message.reply('❌ No se pudo desbloquear el canal. Verifica los permisos del bot.');
   }
 }
 
 async function handleHelp(message) {
   const helpMessage = `
-**Discord Bot Commands**
+**🤖 Comandos del Bot**
 
-**Slash Commands:**
-\`/send user:<@user> message:<text>\` - Send a DM to a user
-\`/say channel:<#channel> message:<text>\` - Send to a channel
-\`/announce message:<text>\` - Send to current channel
-\`/ping\` - Check bot latency
-\`/lock\` - Lock channel (admin only)
-\`/unlock\` - Unlock channel (admin only)
-\`/tickets panel\` - Post the ticket panel (admin only)
-\`/roleadd staff @role\` - Add staff role for tickets (admin only)
-\`/help\` - Show this help
+**🎫 Sistema de Tickets:**
+\`/tickets panel\` - Publicar el panel de tickets *(solo admins)*
+\`/roleadd staff @rol\` - Agregar un rol de staff *(solo admins)*
 
-**Prefix Commands:**
-\`!send @user <message>\` - Send a DM to a user
-\`!say #channel <message>\` - Send to a channel
-\`!announce <message>\` - Send to current channel
-\`!ping\` - Check bot latency
-\`!lock\` - Lock channel (admin only)
-\`!unlock\` - Unlock channel (admin only)
-\`!help\` - Show this help
+**💬 Comandos Generales:**
+\`/say canal:<#canal> mensaje:<texto>\` - Enviar mensaje a un canal *(solo admins)*
+\`/ping\` - Comprobar latencia
+\`/lock\` - Bloquear canal *(solo admins)*
+\`/unlock\` - Desbloquear canal *(solo admins)*
+\`/help\` - Mostrar ayuda
 
-**Tips:**
-- Use Discord formatting (bold, italic, etc.)
-- Mention users with @username for personalization
+**Prefijo:** \`!\`
+\`!say #canal <mensaje>\` • \`!ping\` • \`!lock\` • \`!unlock\` • \`!help\`
 `;
 
   await message.reply(helpMessage);
