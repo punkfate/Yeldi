@@ -136,6 +136,22 @@ export async function handleCreateTicket(interaction) {
   });
 }
 
+function buildTicketEmbed(ticket, ticketNumber, opener, claimedMention) {
+  const isClaimed = !!claimedMention;
+  return new EmbedBuilder()
+    .setTitle(`🎫 Ticket #${ticketNumber.toString().padStart(4, '0')}`)
+    .setDescription(
+      `¡Bienvenido <@${opener}>! Tu ticket ha sido creado.\n\nDescribe tu problema y un miembro del staff te atenderá en breve.`
+    )
+    .addFields(
+      { name: '👤 Abierto por', value: `<@${opener}>`, inline: true },
+      { name: '📋 Estado', value: isClaimed ? '🟡 Reclamado' : '🟢 Abierto', inline: true },
+      { name: '🛡️ Reclamado por', value: claimedMention || 'Nadie', inline: true }
+    )
+    .setColor(isClaimed ? 0xfee75c : 0x57f287)
+    .setTimestamp();
+}
+
 export async function handleClaimTicket(interaction) {
   const guild = interaction.guild;
   const member = interaction.member;
@@ -164,15 +180,17 @@ export async function handleClaimTicket(interaction) {
 
   claimTicket(guild.id, channel.id, member.user.id, member.user.tag);
 
-  await channel.setName(channel.name.replace('ticket-', 'reclamado-'));
+  const safeName = channel.name.replace(/^reclamado-/, 'ticket-').replace(/^ticket-/, 'reclamado-');
+  await channel.setName(safeName);
 
-  const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-    .spliceFields(1, 1, { name: '📋 Estado', value: '🟡 Reclamado', inline: true })
-    .spliceFields(2, 1, { name: '🛡️ Reclamado por', value: `${member}`, inline: true })
-    .setColor(0xfee75c);
-
+  const updatedEmbed = buildTicketEmbed(ticket, ticket.ticketNumber, ticket.userId, `${member}`);
   await interaction.update({ embeds: [updatedEmbed], components: interaction.message.components });
-  await channel.send(`✋ **${member.user.tag}** ha reclamado este ticket.`);
+
+  const notifEmbed = new EmbedBuilder()
+    .setDescription(`✋ ${member} ha **reclamado** este ticket.`)
+    .setColor(0xfee75c)
+    .setTimestamp();
+  await channel.send({ embeds: [notifEmbed] });
 }
 
 export async function handleUnclaimTicket(interaction) {
@@ -203,16 +221,17 @@ export async function handleUnclaimTicket(interaction) {
 
   unclaimTicket(guild.id, channel.id);
 
-  const newName = channel.name.replace('reclamado-', 'ticket-');
+  const newName = channel.name.replace(/^reclamado-/, 'ticket-');
   await channel.setName(newName);
 
-  const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-    .spliceFields(1, 1, { name: '📋 Estado', value: '🟢 Abierto', inline: true })
-    .spliceFields(2, 1, { name: '🛡️ Reclamado por', value: 'Nadie', inline: true })
-    .setColor(0x57f287);
-
+  const updatedEmbed = buildTicketEmbed(ticket, ticket.ticketNumber, ticket.userId, null);
   await interaction.update({ embeds: [updatedEmbed], components: interaction.message.components });
-  await channel.send(`🔓 **${member.user.tag}** ha liberado este ticket.`);
+
+  const notifEmbed = new EmbedBuilder()
+    .setDescription(`🔓 ${member} ha **liberado** este ticket.`)
+    .setColor(0x5865f2)
+    .setTimestamp();
+  await channel.send({ embeds: [notifEmbed] });
 }
 
 export async function handleCloseTicket(interaction) {
@@ -239,7 +258,7 @@ export async function handleCloseTicket(interaction) {
 
   const closeEmbed = new EmbedBuilder()
     .setTitle('🔒 Cerrando Ticket')
-    .setDescription(`Este ticket está siendo cerrado por **${member.user.tag}**.\nEl canal se eliminará en 5 segundos.`)
+    .setDescription(`${member} ha cerrado este ticket.\nEl canal se eliminará en 5 segundos.`)
     .setColor(0xed4245)
     .setTimestamp();
 
