@@ -18,8 +18,6 @@ import {
 } from './ticketConfig.js';
 
 export async function handleTicketsPanel(interaction) {
-  await interaction.deferReply({ ephemeral: true });
-
   const embed = new EmbedBuilder()
     .setTitle('🎫 Sistema de Tickets')
     .setDescription(
@@ -37,8 +35,21 @@ export async function handleTicketsPanel(interaction) {
       .setStyle(ButtonStyle.Primary)
   );
 
-  await interaction.channel.send({ embeds: [embed], components: [row] });
-  await interaction.editReply({ content: '✅ ¡Panel de tickets publicado!' });
+  try {
+    const channel = interaction.channel ?? await interaction.client.channels.fetch(interaction.channelId);
+    await interaction.deferReply({ ephemeral: true });
+    await channel.send({ embeds: [embed], components: [row] });
+    await interaction.editReply({ content: '✅ ¡Panel de tickets publicado!' });
+  } catch (error) {
+    console.error('Error al enviar el panel de tickets:', error);
+    try {
+      if (interaction.deferred) {
+        await interaction.editReply({ content: '❌ No se pudo enviar el panel. Verifica que el bot tenga permisos para enviar mensajes en este canal.' });
+      } else {
+        await interaction.reply({ content: '❌ No se pudo enviar el panel. Verifica que el bot tenga permisos para enviar mensajes en este canal.', ephemeral: true });
+      }
+    } catch {}
+  }
 }
 
 export async function handleCreateTicket(interaction) {
