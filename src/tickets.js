@@ -18,6 +18,8 @@ import {
 } from './ticketConfig.js';
 
 export async function handleTicketsPanel(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
   const embed = new EmbedBuilder()
     .setTitle('🎫 Sistema de Tickets')
     .setDescription(
@@ -35,7 +37,8 @@ export async function handleTicketsPanel(interaction) {
       .setStyle(ButtonStyle.Primary)
   );
 
-  await interaction.reply({ embeds: [embed], components: [row] });
+  await interaction.channel.send({ embeds: [embed], components: [row] });
+  await interaction.editReply({ content: '✅ ¡Panel de tickets publicado!' });
 }
 
 export async function handleCreateTicket(interaction) {
