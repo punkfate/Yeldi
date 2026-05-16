@@ -5,6 +5,7 @@ import {
   ButtonStyle,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
+  UserSelectMenuBuilder,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -40,7 +41,7 @@ export async function handleTicketsPanel(interaction) {
   const embed = new EmbedBuilder()
     .setTitle('🎫 Sistema de Tickets')
     .setDescription(
-      'Selecciona la categoría correspondiente a tu consulta y abre un ticket.\nUn miembro del staff te atenderá lo antes posible.'
+      'Selecciona la categoría correspondiente a tu consulta en el menú de abajo.\nUn miembro del staff te atenderá lo antes posible.'
     )
     .addFields({
       name: '📋 Normas del Sistema de Tickets',
@@ -53,22 +54,32 @@ export async function handleTicketsPanel(interaction) {
         '> • Espera la respuesta del staff, no insistas de forma repetitiva.'
       ].join('\n')
     })
-    .addFields(
-      { name: '🚨 Reportes', value: 'Reportar a un usuario del servidor', inline: true },
-      { name: '❓ Dudas Generales', value: 'Consultas y soporte general', inline: true },
-      { name: '📝 Postulaciones', value: 'Unirte al equipo de staff', inline: true }
-    )
     .setColor(0x5865f2)
-    .setFooter({ text: 'Haz clic en el botón para abrir tu ticket' })
+    .setFooter({ text: 'Usa el menú desplegable para abrir tu ticket' })
     .setTimestamp();
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('create_ticket')
-      .setLabel('Abrir Ticket')
-      .setEmoji('🎫')
-      .setStyle(ButtonStyle.Primary)
-  );
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('ticket_category')
+    .setPlaceholder('📂 Selecciona una categoría...')
+    .addOptions(
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Reportes')
+        .setDescription('Reporta a un usuario que haya infringido las normas del servidor')
+        .setEmoji('🚨')
+        .setValue('report'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Dudas Generales')
+        .setDescription('¿Tienes una pregunta o necesitas ayuda? Abre un ticket aquí')
+        .setEmoji('❓')
+        .setValue('general'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Postulaciones')
+        .setDescription('¿Quieres unirte al equipo de staff? Postúlate aquí')
+        .setEmoji('📝')
+        .setValue('postulation')
+    );
+
+  const row = new ActionRowBuilder().addComponents(select);
 
   try {
     const channel = interaction.channel ?? await interaction.client.channels.fetch(interaction.channelId);
@@ -80,81 +91,37 @@ export async function handleTicketsPanel(interaction) {
   }
 }
 
-export async function handleOpenTicketButton(interaction) {
-  const existingTicket = Object.entries(getGuildConfig(interaction.guild.id).tickets).find(
-    ([, t]) => t.userId === interaction.user.id
-  );
-  if (existingTicket) {
-    const existing = interaction.guild.channels.cache.get(existingTicket[0]);
-    if (existing) {
-      await interaction.reply({
-        content: `❌ Ya tienes un ticket abierto: ${existing}`,
-        ephemeral: true
-      });
-      return;
-    }
-  }
-
-  const select = new StringSelectMenuBuilder()
-    .setCustomId('ticket_category')
-    .setPlaceholder('Selecciona la categoría de tu ticket...')
-    .addOptions(
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Reportes')
-        .setDescription('Reportar a un usuario del servidor')
-        .setEmoji('🚨')
-        .setValue('report'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Dudas Generales')
-        .setDescription('Consultas y soporte general')
-        .setEmoji('❓')
-        .setValue('general'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Postulaciones')
-        .setDescription('Postúlate para unirte al equipo de staff')
-        .setEmoji('📝')
-        .setValue('postulation')
-    );
-
-  const row = new ActionRowBuilder().addComponents(select);
-
-  await interaction.reply({
-    content: '**Selecciona la categoría de tu ticket:**',
-    components: [row],
-    ephemeral: true
-  });
+function hasOpenTicket(interaction) {
+  const config = getGuildConfig(interaction.guild.id);
+  const existing = Object.entries(config.tickets).find(([, t]) => t.userId === interaction.user.id);
+  if (!existing) return null;
+  const channel = interaction.guild.channels.cache.get(existing[0]);
+  return channel || null;
 }
 
 export async function handleCategorySelect(interaction) {
   const category = interaction.values[0];
 
+  const openChannel = hasOpenTicket(interaction);
+  if (openChannel) {
+    await interaction.reply({ content: `❌ Ya tienes un ticket abierto: ${openChannel}`, ephemeral: true });
+    return;
+  }
+
   if (category === 'report') {
-    const modal = new ModalBuilder()
-      .setCustomId('modal_ticket_report')
-      .setTitle('🚨 Reporte de Usuario');
+    const userSelect = new UserSelectMenuBuilder()
+      .setCustomId('report_user_select')
+      .setPlaceholder('Busca y selecciona al usuario a reportar...')
+      .setMinValues(1)
+      .setMaxValues(1);
 
-    const userInput = new TextInputBuilder()
-      .setCustomId('reported_user')
-      .setLabel('Usuario a reportar (nombre o ID)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('Ej: NombreUsuario o 123456789012345678')
-      .setRequired(true)
-      .setMaxLength(100);
+    const row = new ActionRowBuilder().addComponents(userSelect);
 
-    const reasonInput = new TextInputBuilder()
-      .setCustomId('report_reason')
-      .setLabel('Razón del reporte')
-      .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('Explica detalladamente el motivo del reporte. Si tienes evidencia, menciónala.')
-      .setRequired(true)
-      .setMaxLength(1000);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(userInput),
-      new ActionRowBuilder().addComponents(reasonInput)
-    );
-
-    await interaction.showModal(modal);
+    await interaction.reply({
+      content: '**🚨 Reporte — Paso 1/2:** Selecciona al usuario que quieres reportar:',
+      components: [row],
+      ephemeral: true
+    });
     return;
   }
 
@@ -171,24 +138,63 @@ export async function handleCategorySelect(interaction) {
       .setRequired(true)
       .setMaxLength(1000);
 
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(reasonInput)
-    );
-
+    modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
     await interaction.showModal(modal);
     return;
   }
 
   if (category === 'postulation') {
-    await interaction.deferUpdate();
+    await interaction.deferReply({ ephemeral: true });
     await openTicket(interaction, 'postulation', {});
   }
 }
 
+export async function handleReportUserSelect(interaction) {
+  const selectedUserId = interaction.values[0];
+  const selectedUser = interaction.guild.members.cache.get(selectedUserId)?.user
+    || await interaction.guild.members.fetch(selectedUserId).then(m => m.user).catch(() => null);
+
+  const displayName = selectedUser
+    ? `${selectedUser.username} (${selectedUserId})`
+    : selectedUserId;
+
+  const modal = new ModalBuilder()
+    .setCustomId(`modal_ticket_report_${selectedUserId}`)
+    .setTitle('🚨 Reporte — Paso 2/2');
+
+  const userDisplay = new TextInputBuilder()
+    .setCustomId('reported_display')
+    .setLabel('Usuario a reportar')
+    .setStyle(TextInputStyle.Short)
+    .setValue(displayName)
+    .setRequired(true);
+
+  const reasonInput = new TextInputBuilder()
+    .setCustomId('report_reason')
+    .setLabel('Razón del reporte')
+    .setStyle(TextInputStyle.Paragraph)
+    .setPlaceholder('Explica detalladamente el motivo del reporte. Si tienes evidencia, menciónala.')
+    .setRequired(true)
+    .setMaxLength(1000);
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(userDisplay),
+    new ActionRowBuilder().addComponents(reasonInput)
+  );
+
+  await interaction.showModal(modal);
+}
+
 export async function handleModalReport(interaction) {
   await interaction.deferReply({ ephemeral: true });
-  const reportedUser = interaction.fields.getTextInputValue('reported_user');
+  const reportedUserId = interaction.customId.slice('modal_ticket_report_'.length);
+  const reportedDisplay = interaction.fields.getTextInputValue('reported_display');
   const reportReason = interaction.fields.getTextInputValue('report_reason');
+
+  const reportedUser = reportedUserId
+    ? `<@${reportedUserId}> — ${reportedDisplay}`
+    : reportedDisplay;
+
   await openTicket(interaction, 'report', { reportedUser, reportReason });
 }
 

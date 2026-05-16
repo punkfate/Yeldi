@@ -4,8 +4,8 @@ import { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } from 'discord.
 import { addStaffRole, setTranscriptChannel } from './ticketConfig.js';
 import {
   handleTicketsPanel,
-  handleOpenTicketButton,
   handleCategorySelect,
+  handleReportUserSelect,
   handleModalReport,
   handleModalGeneral,
   handleClaimTicket,
@@ -117,9 +117,6 @@ async function main() {
       try {
         if (interaction.isButton()) {
           switch (interaction.customId) {
-            case 'create_ticket':
-              await handleOpenTicketButton(interaction);
-              break;
             case 'claim_ticket':
               await handleClaimTicket(interaction);
               break;
@@ -136,12 +133,21 @@ async function main() {
         if (interaction.isStringSelectMenu()) {
           if (interaction.customId === 'ticket_category') {
             await handleCategorySelect(interaction);
+          } else if (interaction.customId === 'report_user_select') {
+            await handleReportUserSelect(interaction);
+          }
+          return;
+        }
+
+        if (interaction.isUserSelectMenu()) {
+          if (interaction.customId === 'report_user_select') {
+            await handleReportUserSelect(interaction);
           }
           return;
         }
 
         if (interaction.isModalSubmit()) {
-          if (interaction.customId === 'modal_ticket_report') {
+          if (interaction.customId.startsWith('modal_ticket_report_')) {
             await handleModalReport(interaction);
           } else if (interaction.customId === 'modal_ticket_general') {
             await handleModalGeneral(interaction);
