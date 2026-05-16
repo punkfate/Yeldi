@@ -1,3 +1,4 @@
+import { createServer } from 'http';
 import { getDiscordClient } from './discord.js';
 import { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { addStaffRole, setTranscriptChannel } from './ticketConfig.js';
@@ -8,7 +9,8 @@ import {
   handleUnclaimTicket,
   handleCloseTicket
 } from './tickets.js';
-import './web.js';
+
+createServer((_, res) => res.end('ok')).listen(5000, '0.0.0.0');
 
 const PREFIX = '!';
 
@@ -78,9 +80,6 @@ async function registerSlashCommands(client) {
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
 
   try {
-    console.log('Limpiando comandos antiguos...');
-    await rest.put(Routes.applicationCommands(client.user.id), { body: [] });
-
     console.log('Registrando comandos slash...');
     await rest.put(
       Routes.applicationCommands(client.user.id),
