@@ -1,78 +1,75 @@
 # Discord Personalized Messenger Bot
 
 ## Overview
-A Discord bot that allows you to send personalized messages to users and channels using both slash commands (/) and prefix commands (!). Includes a full ticket system.
+A Discord bot that allows you to send messages to users and channels using both slash commands (/) and prefix commands (!). Includes a full ticket system with categories, modals, and transcripts.
 
 ## Recent Changes
+- **2026-05-16**: Ticket system redesigned with dropdown categories (Reportes, Dudas Generales, Postulaciones), modals with questions per category, and panel with ticket norms
+- **2026-05-16**: Fixed all "interaction failed" errors — command registration now atomic, ticket button/claim/unclaim timing fixed
+- **2026-05-16**: Removed Express web server (src/web.js deleted), minimal port listener in index.js
 - **2026-04-05**: Added full ticket system with panel, staff roles, claim/unclaim/close buttons
 - **2025-12-24**: Added web server for uptime monitoring, made ping command visible to everyone
-- **2025-12-24**: Added ping command to check bot latency, removed bot-activo
 - **2025-01-08**: Added slash command support alongside prefix commands
-- **2025-01-08**: Initial bot creation with command handler
 
 ## Commands
 
-### Ticket System (NEW)
+### Ticket System
 - `/tickets panel` - Post the ticket panel embed in the current channel (admin only)
 - `/roleadd staff @role` - Add a role as staff so they can see and manage tickets (admin only)
+- `/transcript channel #canal` - Set the channel where ticket transcripts are sent (admin only)
+
+#### Ticket Flow
+1. User clicks **Abrir Ticket** button in the panel
+2. A dropdown appears with 3 categories:
+   - **🚨 Reportes** — Opens a modal asking for the reported user and reason
+   - **❓ Dudas Generales** — Opens a modal asking for the ticket reason
+   - **📝 Postulaciones** — Creates the ticket directly (no questions)
+3. Bot creates a private channel and sends an embed with the user's answers
+4. Staff can **Reclamar**, **Liberar**, or **Cerrar Ticket** using the buttons inside
 
 #### Ticket Buttons (inside ticket channels)
-- `✋ Claim` - Staff claims the ticket (renames channel to claimed-XXXX)
-- `🔓 Unclaim` - Releases the claim on the ticket
-- `🔒 Close Ticket` - Closes and deletes the ticket channel after 5 seconds
+- `✋ Reclamar` - Staff claims the ticket (renames channel to reclamado-XXXX)
+- `🔓 Liberar` - Releases the claim on the ticket
+- `🔒 Cerrar Ticket` - Sends transcript (if configured) and deletes the channel after 5 seconds
 
 ### Slash Commands
-- `/send user:@user message:<text>` - Send a personalized DM to a user
-- `/say channel:#channel message:<text>` - Send a message to a specific channel
-- `/announce message:<text>` - Send a message to the current channel
+- `/say #canal <mensaje>` - Send a message to a specific channel (admin only)
 - `/ping` - Check the bot's latency
-- `/lock` - Lock the current channel to prevent users from talking (admin only)
-- `/unlock` - Unlock the current channel to allow users to talk (admin only)
+- `/lock` - Lock the current channel (admin only)
+- `/unlock` - Unlock the current channel (admin only)
 - `/help` - Show all available commands
 
-### Prefix Commands
-- `!send @user <message>` - Send a personalized direct message to a user
-- `!say #channel <message>` - Send a message to a specific channel
-- `!announce <message>` - Send a message to the current channel
+### Prefix Commands (`!`)
+- `!say #canal <mensaje>` - Send a message to a specific channel
 - `!ping` - Check the bot's latency
-- `!lock` - Lock the current channel (admin only)
-- `!unlock` - Unlock the current channel (admin only)
+- `!lock` / `!unlock` - Lock or unlock a channel
 - `!help` - Show all available commands
 
 ## Project Structure
 ```
 src/
-  discord.js       - Discord client authentication
-  index.js         - Main bot code with command handlers (slash + prefix)
-  tickets.js       - Ticket system logic (panel, create, claim, unclaim, close)
-  ticketConfig.js  - Persistent storage for staff roles and ticket data
-  web.js           - Express web server for uptime monitoring
+  discord.js       - Discord client authentication and intents
+  index.js         - Main bot: slash/prefix command handlers, interaction router
+  tickets.js       - Ticket system: panel, category select, modals, claim/unclaim/close
+  ticketConfig.js  - Persistent JSON storage for staff roles, tickets, and settings
 data/
-  ticketConfig.json - Stores staff roles and open tickets per guild
+  ticketConfig.json - Stores staff roles, open tickets, counters, transcript channel per guild
 package.json       - Node.js dependencies
 ```
 
 ## User Preferences
-- Uses Discord.js library
+- Uses Discord.js v14 library
+- ES Modules (`"type": "module"`)
 - Supports both slash commands and prefix commands
-- Bot token stored securely in environment secrets
+- Bot token stored securely in DISCORD_BOT_TOKEN environment secret
 - Admin-only commands (requires Administrator permission)
-- Web server for uptime monitoring with UptimeRobot
+- All bot messages in Spanish
 
 ## Architecture
-- Bot authenticates using DISCORD_BOT_TOKEN environment variable
-- Slash commands are registered globally on startup
-- Both slash and prefix commands are handled in parallel
-- Button interactions handled for ticket system
-- Ticket data persisted to data/ticketConfig.json
+- Bot authenticates using `DISCORD_BOT_TOKEN` environment variable
+- Slash commands registered globally on startup (single atomic PUT, no clear+register gap)
+- Interaction router handles: buttons, string select menus, modal submits, slash commands, prefix commands
+- Ticket data (category, fields/answers, claim state) persisted to `data/ticketConfig.json`
 - Staff roles stored per guild
-- Tickets created in a "Tickets" category (auto-created if missing)
-- Commands restricted to users with Administrator permission (except ping)
-- Express web server runs on port 5000 for uptime monitoring
-
-## Uptime Monitoring
-To keep the bot alive 24/7:
-1. Get your Replit domain from the web server URL
-2. Visit [UptimeRobot.com](https://uptimerobot.com)
-3. Create a monitor pointing to your Replit web server
-4. Set interval to ping every 5 minutes
+- Channel names: `reporte-NNNN-user`, `duda-NNNN-user`, `postulacion-NNNN-user`; claimed → `reclamado-NNNN-user`
+- Minimal HTTP server on port 5000 (required by Replit to keep the process alive)

@@ -1,12 +1,8 @@
 {
   "1439778522393481287": {
-    "staffRoles": [
-      "1439778742686715904",
-      "1443270106380636160",
-      "1458432489831006272"
-    ],
+    "staffRoles": [],
     "tickets": {},
-    "ticketCounter": 9,
-    "transcriptChannel": "1443269008559444039"
+    "ticketCounter": 0,
+    "transcriptChannel": null
   }
 }

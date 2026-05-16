@@ -58,7 +58,7 @@ export function getTranscriptChannel(guildId) {
   return config[guildId]?.transcriptChannel || null;
 }
 
-export function createTicket(guildId, channelId, userId, ticketNumber) {
+export function createTicket(guildId, channelId, userId, ticketNumber, category, fields) {
   let config = loadConfig();
   config = ensureGuild(config, guildId);
   config[guildId].tickets[channelId] = {
@@ -66,6 +66,8 @@ export function createTicket(guildId, channelId, userId, ticketNumber) {
     claimedBy: null,
     claimedByTag: null,
     ticketNumber,
+    category: category || 'general',
+    fields: fields || {},
     createdAt: Date.now()
   };
   config[guildId].ticketCounter = ticketNumber;

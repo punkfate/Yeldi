@@ -4,7 +4,10 @@ import { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } from 'discord.
 import { addStaffRole, setTranscriptChannel } from './ticketConfig.js';
 import {
   handleTicketsPanel,
-  handleCreateTicket,
+  handleOpenTicketButton,
+  handleCategorySelect,
+  handleModalReport,
+  handleModalGeneral,
   handleClaimTicket,
   handleUnclaimTicket,
   handleCloseTicket
@@ -115,7 +118,7 @@ async function main() {
         if (interaction.isButton()) {
           switch (interaction.customId) {
             case 'create_ticket':
-              await handleCreateTicket(interaction);
+              await handleOpenTicketButton(interaction);
               break;
             case 'claim_ticket':
               await handleClaimTicket(interaction);
@@ -126,6 +129,22 @@ async function main() {
             case 'close_ticket':
               await handleCloseTicket(interaction);
               break;
+          }
+          return;
+        }
+
+        if (interaction.isStringSelectMenu()) {
+          if (interaction.customId === 'ticket_category') {
+            await handleCategorySelect(interaction);
+          }
+          return;
+        }
+
+        if (interaction.isModalSubmit()) {
+          if (interaction.customId === 'modal_ticket_report') {
+            await handleModalReport(interaction);
+          } else if (interaction.customId === 'modal_ticket_general') {
+            await handleModalGeneral(interaction);
           }
           return;
         }

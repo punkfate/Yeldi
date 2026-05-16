@@ -3,6 +3,11 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   PermissionFlagsBits,
   ChannelType
 } from 'discord.js';
@@ -17,16 +22,44 @@ import {
   getTranscriptChannel
 } from './ticketConfig.js';
 
+const CATEGORY_LABELS = {
+  report: '🚨 Reporte',
+  general: '❓ Duda General',
+  postulation: '📝 Postulación'
+};
+
+const CATEGORY_COLORS = {
+  report: 0xed4245,
+  general: 0x5865f2,
+  postulation: 0x57f287
+};
+
 export async function handleTicketsPanel(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   const embed = new EmbedBuilder()
     .setTitle('🎫 Sistema de Tickets')
     .setDescription(
-      '¿Necesitas ayuda? Haz clic en el botón de abajo para abrir un ticket de soporte.\n\nSe creará un canal privado exclusivamente para ti.'
+      'Selecciona la categoría correspondiente a tu consulta y abre un ticket.\nUn miembro del staff te atenderá lo antes posible.'
+    )
+    .addFields({
+      name: '📋 Normas del Sistema de Tickets',
+      value: [
+        '> • Sé respetuoso con el staff y los demás usuarios en todo momento.',
+        '> • No abras tickets innecesarios, de broma o spam.',
+        '> • Abre **un solo ticket** por asunto, no duplicados.',
+        '> • Proporciona información clara y detallada en tu ticket.',
+        '> • Si tu ticket es un reporte, incluye evidencia si es posible.',
+        '> • Espera la respuesta del staff, no insistas de forma repetitiva.'
+      ].join('\n')
+    })
+    .addFields(
+      { name: '🚨 Reportes', value: 'Reportar a un usuario del servidor', inline: true },
+      { name: '❓ Dudas Generales', value: 'Consultas y soporte general', inline: true },
+      { name: '📝 Postulaciones', value: 'Unirte al equipo de staff', inline: true }
     )
     .setColor(0x5865f2)
-    .setFooter({ text: 'Sistema de Soporte' })
+    .setFooter({ text: 'Haz clic en el botón para abrir tu ticket' })
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
@@ -43,43 +76,149 @@ export async function handleTicketsPanel(interaction) {
     await interaction.editReply({ content: '✅ ¡Panel de tickets publicado!' });
   } catch (error) {
     console.error('Error al enviar el panel de tickets:', error);
-    await interaction.editReply({ content: '❌ No se pudo publicar el panel. Verifica que el bot tenga permisos en este canal.' });
+    await interaction.editReply({ content: '❌ No se pudo publicar el panel. Verifica los permisos del bot en este canal.' });
   }
 }
 
-export async function handleCreateTicket(interaction) {
-  await interaction.deferReply({ ephemeral: true });
-
-  const guild = interaction.guild;
-  const member = interaction.member;
-  const guildConfig = getGuildConfig(guild.id);
-  const ticketNumber = nextTicketNumber(guild.id);
-  const channelName = `ticket-${ticketNumber.toString().padStart(4, '0')}-${member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-
-  const existingTicket = Object.entries(guildConfig.tickets).find(
-    ([, t]) => t.userId === member.user.id
+export async function handleOpenTicketButton(interaction) {
+  const existingTicket = Object.entries(getGuildConfig(interaction.guild.id).tickets).find(
+    ([, t]) => t.userId === interaction.user.id
   );
   if (existingTicket) {
-    const existing = guild.channels.cache.get(existingTicket[0]);
+    const existing = interaction.guild.channels.cache.get(existingTicket[0]);
     if (existing) {
-      await interaction.editReply({ content: `❌ Ya tienes un ticket abierto: ${existing}` });
+      await interaction.reply({
+        content: `❌ Ya tienes un ticket abierto: ${existing}`,
+        ephemeral: true
+      });
       return;
     }
   }
 
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('ticket_category')
+    .setPlaceholder('Selecciona la categoría de tu ticket...')
+    .addOptions(
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Reportes')
+        .setDescription('Reportar a un usuario del servidor')
+        .setEmoji('🚨')
+        .setValue('report'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Dudas Generales')
+        .setDescription('Consultas y soporte general')
+        .setEmoji('❓')
+        .setValue('general'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Postulaciones')
+        .setDescription('Postúlate para unirte al equipo de staff')
+        .setEmoji('📝')
+        .setValue('postulation')
+    );
+
+  const row = new ActionRowBuilder().addComponents(select);
+
+  await interaction.reply({
+    content: '**Selecciona la categoría de tu ticket:**',
+    components: [row],
+    ephemeral: true
+  });
+}
+
+export async function handleCategorySelect(interaction) {
+  const category = interaction.values[0];
+
+  if (category === 'report') {
+    const modal = new ModalBuilder()
+      .setCustomId('modal_ticket_report')
+      .setTitle('🚨 Reporte de Usuario');
+
+    const userInput = new TextInputBuilder()
+      .setCustomId('reported_user')
+      .setLabel('Usuario a reportar (nombre o ID)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('Ej: NombreUsuario o 123456789012345678')
+      .setRequired(true)
+      .setMaxLength(100);
+
+    const reasonInput = new TextInputBuilder()
+      .setCustomId('report_reason')
+      .setLabel('Razón del reporte')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Explica detalladamente el motivo del reporte. Si tienes evidencia, menciónala.')
+      .setRequired(true)
+      .setMaxLength(1000);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(userInput),
+      new ActionRowBuilder().addComponents(reasonInput)
+    );
+
+    await interaction.showModal(modal);
+    return;
+  }
+
+  if (category === 'general') {
+    const modal = new ModalBuilder()
+      .setCustomId('modal_ticket_general')
+      .setTitle('❓ Duda General');
+
+    const reasonInput = new TextInputBuilder()
+      .setCustomId('general_reason')
+      .setLabel('¿Cuál es el motivo de tu ticket?')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Describe tu duda o problema con el mayor detalle posible.')
+      .setRequired(true)
+      .setMaxLength(1000);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(reasonInput)
+    );
+
+    await interaction.showModal(modal);
+    return;
+  }
+
+  if (category === 'postulation') {
+    await interaction.deferUpdate();
+    await openTicket(interaction, 'postulation', {});
+  }
+}
+
+export async function handleModalReport(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  const reportedUser = interaction.fields.getTextInputValue('reported_user');
+  const reportReason = interaction.fields.getTextInputValue('report_reason');
+  await openTicket(interaction, 'report', { reportedUser, reportReason });
+}
+
+export async function handleModalGeneral(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  const generalReason = interaction.fields.getTextInputValue('general_reason');
+  await openTicket(interaction, 'general', { generalReason });
+}
+
+async function openTicket(interaction, category, fields) {
+  const guild = interaction.guild;
+  const member = interaction.member;
+  const guildConfig = getGuildConfig(guild.id);
+  const ticketNumber = nextTicketNumber(guild.id);
+
+  const prefixes = { report: 'reporte', general: 'duda', postulation: 'postulacion' };
+  const prefix = prefixes[category] || 'ticket';
+  const safeName = member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20) || 'usuario';
+  const channelName = `${prefix}-${ticketNumber.toString().padStart(4, '0')}-${safeName}`;
+
   const permissionOverwrites = [
-    {
-      id: guild.roles.everyone,
-      deny: [PermissionFlagsBits.ViewChannel],
-    },
+    { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
     {
       id: member.user.id,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.ReadMessageHistory,
-      ],
-    },
+        PermissionFlagsBits.ReadMessageHistory
+      ]
+    }
   ];
 
   for (const roleId of guildConfig.staffRoles) {
@@ -89,8 +228,8 @@ export async function handleCreateTicket(interaction) {
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
         PermissionFlagsBits.ReadMessageHistory,
-        PermissionFlagsBits.ManageMessages,
-      ],
+        PermissionFlagsBits.ManageMessages
+      ]
     });
   }
 
@@ -98,24 +237,13 @@ export async function handleCreateTicket(interaction) {
     const ticketChannel = await guild.channels.create({
       name: channelName,
       type: ChannelType.GuildText,
-      parent: interaction.channel.parentId || null,
-      permissionOverwrites,
+      parent: interaction.channel?.parentId || null,
+      permissionOverwrites
     });
 
-    createTicket(guild.id, ticketChannel.id, member.user.id, ticketNumber);
+    createTicket(guild.id, ticketChannel.id, member.user.id, ticketNumber, category, fields);
 
-    const embed = new EmbedBuilder()
-      .setTitle(`🎫 Ticket #${ticketNumber.toString().padStart(4, '0')}`)
-      .setDescription(
-        `¡Bienvenido ${member}! Tu ticket ha sido creado.\n\nDescribe tu problema y un miembro del staff te atenderá en breve.`
-      )
-      .addFields(
-        { name: '👤 Abierto por', value: `${member}`, inline: true },
-        { name: '📋 Estado', value: '🟢 Abierto', inline: true },
-        { name: '🛡️ Reclamado por', value: 'Nadie', inline: true }
-      )
-      .setColor(0x57f287)
-      .setTimestamp();
+    const embed = buildNewTicketEmbed(ticketNumber, category, member, fields);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -136,27 +264,104 @@ export async function handleCreateTicket(interaction) {
     );
 
     await ticketChannel.send({ content: `${member}`, embeds: [embed], components: [row] });
-    await interaction.editReply({ content: `✅ Tu ticket ha sido creado: ${ticketChannel}` });
+
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply({ content: `✅ Tu ticket ha sido creado: ${ticketChannel}`, components: [] });
+    } else {
+      await interaction.followUp({ content: `✅ Tu ticket ha sido creado: ${ticketChannel}`, ephemeral: true });
+    }
   } catch (error) {
     console.error('Error al crear el ticket:', error);
-    await interaction.editReply({ content: '❌ No se pudo crear el ticket. Verifica los permisos del bot.' });
+    const msg = { content: '❌ No se pudo crear el ticket. Verifica los permisos del bot.', components: [] };
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply(msg);
+      } else {
+        await interaction.followUp({ ...msg, ephemeral: true });
+      }
+    } catch {}
   }
+}
+
+function buildNewTicketEmbed(ticketNumber, category, member, fields) {
+  const num = ticketNumber.toString().padStart(4, '0');
+  const label = CATEGORY_LABELS[category] || '🎫 Ticket';
+  const color = CATEGORY_COLORS[category] || 0x5865f2;
+
+  const descriptions = {
+    report: `¡Hola ${member}! Tu reporte ha sido recibido.\nEl staff lo revisará lo antes posible.`,
+    general: `¡Hola ${member}! Tu ticket ha sido creado.\nDescribe tu situación y el staff te atenderá pronto.`,
+    postulation: `¡Hola ${member}! Tu solicitud de postulación ha sido recibida.\nEl staff revisará tu candidatura.`
+  };
+
+  const embed = new EmbedBuilder()
+    .setTitle(`🎫 Ticket #${num} — ${label}`)
+    .setDescription(descriptions[category] || `¡Hola ${member}! Tu ticket ha sido creado.`)
+    .addFields(
+      { name: '👤 Abierto por', value: `${member}`, inline: true },
+      { name: '📋 Estado', value: '🟢 Abierto', inline: true },
+      { name: '🛡️ Reclamado por', value: 'Nadie', inline: true }
+    )
+    .setColor(color)
+    .setTimestamp();
+
+  if (category === 'report') {
+    embed.addFields(
+      { name: '\u200b', value: '**— Detalles del Reporte —**', inline: false },
+      { name: '🎯 Usuario reportado', value: fields.reportedUser || '—', inline: false },
+      { name: '📝 Razón del reporte', value: fields.reportReason || '—', inline: false }
+    );
+  }
+
+  if (category === 'general') {
+    embed.addFields(
+      { name: '\u200b', value: '**— Detalles —**', inline: false },
+      { name: '📝 Motivo del ticket', value: fields.generalReason || '—', inline: false }
+    );
+  }
+
+  return embed;
 }
 
 function buildTicketEmbed(ticket, ticketNumber, openerId, claimedMention) {
   const isClaimed = !!claimedMention;
-  return new EmbedBuilder()
-    .setTitle(`🎫 Ticket #${ticketNumber.toString().padStart(4, '0')}`)
-    .setDescription(
-      `¡Bienvenido <@${openerId}>! Tu ticket ha sido creado.\n\nDescribe tu problema y un miembro del staff te atenderá en breve.`
-    )
+  const num = ticketNumber.toString().padStart(4, '0');
+  const label = CATEGORY_LABELS[ticket.category] || '🎫 Ticket';
+  const color = isClaimed ? 0xfee75c : (CATEGORY_COLORS[ticket.category] || 0x5865f2);
+
+  const descriptions = {
+    report: `Tu reporte ha sido recibido.\nEl staff lo revisará lo antes posible.`,
+    general: `Tu ticket ha sido creado.\nEl staff te atenderá pronto.`,
+    postulation: `Tu solicitud de postulación ha sido recibida.\nEl staff revisará tu candidatura.`
+  };
+
+  const embed = new EmbedBuilder()
+    .setTitle(`🎫 Ticket #${num} — ${label}`)
+    .setDescription(descriptions[ticket.category] || 'Ticket abierto.')
     .addFields(
       { name: '👤 Abierto por', value: `<@${openerId}>`, inline: true },
       { name: '📋 Estado', value: isClaimed ? '🟡 Reclamado' : '🟢 Abierto', inline: true },
       { name: '🛡️ Reclamado por', value: claimedMention || 'Nadie', inline: true }
     )
-    .setColor(isClaimed ? 0xfee75c : 0x57f287)
+    .setColor(color)
     .setTimestamp();
+
+  if (ticket.category === 'report' && ticket.fields) {
+    embed.addFields(
+      { name: '\u200b', value: '**— Detalles del Reporte —**', inline: false },
+      { name: '🎯 Usuario reportado', value: ticket.fields.reportedUser || '—', inline: false },
+      { name: '📝 Razón del reporte', value: ticket.fields.reportReason || '—', inline: false }
+    );
+  }
+
+  if (ticket.category === 'general' && ticket.fields) {
+    embed.addFields(
+      { name: '\u200b', value: '**— Detalles —**', inline: false },
+      { name: '📝 Motivo del ticket', value: ticket.fields.generalReason || '—', inline: false }
+    );
+  }
+
+  return embed;
 }
 
 export async function handleClaimTicket(interaction) {
@@ -196,8 +401,8 @@ export async function handleClaimTicket(interaction) {
     .setTimestamp();
   await channel.send({ embeds: [notifEmbed] });
 
-  const safeName = channel.name.replace(/^reclamado-/, 'ticket-').replace(/^ticket-/, 'reclamado-');
-  channel.setName(safeName).catch(err => console.error('Error al renombrar canal:', err));
+  const baseName = channel.name.replace(/^reclamado-/, '');
+  channel.setName(`reclamado-${baseName}`).catch(err => console.error('Error al renombrar canal:', err));
 }
 
 export async function handleUnclaimTicket(interaction) {
@@ -237,7 +442,7 @@ export async function handleUnclaimTicket(interaction) {
     .setTimestamp();
   await channel.send({ embeds: [notifEmbed] });
 
-  const newName = channel.name.replace(/^reclamado-/, 'ticket-');
+  const newName = channel.name.replace(/^reclamado-/, '');
   channel.setName(newName).catch(err => console.error('Error al renombrar canal:', err));
 }
 
@@ -288,8 +493,9 @@ export async function handleCloseTicket(interaction) {
       const transcriptChannel = guild.channels.cache.get(transcriptChannelId);
       if (transcriptChannel) {
         const ticketNum = ticket.ticketNumber.toString().padStart(4, '0');
+        const label = CATEGORY_LABELS[ticket.category] || '🎫 Ticket';
         const transcriptEmbed = new EmbedBuilder()
-          .setTitle(`📄 Transcripción — Ticket #${ticketNum}`)
+          .setTitle(`📄 Transcripción — Ticket #${ticketNum} — ${label}`)
           .addFields(
             { name: '👤 Abierto por', value: `<@${ticket.userId}>`, inline: true },
             { name: '🔒 Cerrado por', value: member.user.tag, inline: true },
@@ -301,9 +507,7 @@ export async function handleCloseTicket(interaction) {
 
         const transcriptText = transcriptLines.join('\n').slice(0, 1900);
         await transcriptChannel.send({ embeds: [transcriptEmbed] });
-        await transcriptChannel.send({
-          content: `\`\`\`\n${transcriptText || 'Sin mensajes.'}\n\`\`\``
-        });
+        await transcriptChannel.send({ content: `\`\`\`\n${transcriptText || 'Sin mensajes.'}\n\`\`\`` });
       }
     }
   } catch (err) {
