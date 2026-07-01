@@ -1,6 +1,6 @@
 import { createServer } from 'http';
 import { getDiscordClient } from './discord.js';
-import { REST, Routes, SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
+import { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { addStaffRole, setTranscriptChannel } from './ticketConfig.js';
 import {
   handleTicketsPanel,
@@ -62,15 +62,6 @@ const slashCommands = [
           option.setName('rol')
             .setDescription('El rol a agregar como staff')
             .setRequired(true))),
-  new SlashCommandBuilder()
-    .setName('snipe')
-    .setDescription('Busca nombres de usuario de Discord disponibles con un número concreto de caracteres')
-    .addIntegerOption(option =>
-      option.setName('caracteres')
-        .setDescription('Número de caracteres del nombre (2-32)')
-        .setRequired(true)
-        .setMinValue(2)
-        .setMaxValue(32)),
   new SlashCommandBuilder()
     .setName('transcript')
     .setDescription('Configurar canal de transcripciones de tickets')
@@ -181,9 +172,6 @@ async function main() {
             break;
           case 'help':
             await handleSlashHelp(interaction);
-            break;
-          case 'snipe':
-            await handleSlashSnipe(interaction);
             break;
           case 'tickets':
             if (interaction.options.getSubcommand() === 'panel') {
@@ -348,88 +336,6 @@ async function handleSlashHelp(interaction) {
 `;
 
   await interaction.reply({ content: helpMessage, ephemeral: true });
-}
-
-async function handleSlashSnipe(interaction) {
-  const length = interaction.options.getInteger('caracteres');
-  await interaction.deferReply({ ephemeral: true });
-
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789_';
-  const delay = ms => new Promise(r => setTimeout(r, ms));
-
-  function generateUsername(len) {
-    let name = '';
-    for (let i = 0; i < len; i++) {
-      if (i === 0 || i === len - 1) {
-        name += 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)];
-      } else {
-        name += chars[Math.floor(Math.random() * chars.length)];
-      }
-    }
-    return name;
-  }
-
-  const available = [];
-  const tried = new Set();
-  const maxAttempts = 25;
-
-  for (let i = 0; i < maxAttempts && available.length < 5; i++) {
-    const username = generateUsername(length);
-    if (tried.has(username)) continue;
-    tried.add(username);
-
-    try {
-      const res = await fetch('https://discord.com/api/v9/unique-username/validate-username', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ username })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.taken === false) {
-          available.push(username);
-        }
-      } else if (res.status === 429) {
-        const retry = res.headers.get('retry-after');
-        await delay((parseFloat(retry) || 2) * 1000);
-        i--;
-        continue;
-      }
-    } catch (err) {
-      console.error('Error al comprobar username:', err);
-    }
-
-    await delay(400);
-  }
-
-  if (available.length === 0) {
-    const embed = new EmbedBuilder()
-      .setTitle(`🎯 Snipe — ${length} caracteres`)
-      .setDescription(
-        '❌ No se encontraron nombres disponibles en esta búsqueda.\n' +
-        'Discord puede estar limitando las comprobaciones. Inténtalo de nuevo en unos segundos.'
-      )
-      .setColor(0xed4245)
-      .setTimestamp();
-    await interaction.editReply({ embeds: [embed] });
-    return;
-  }
-
-  const embed = new EmbedBuilder()
-    .setTitle(`🎯 Nombres disponibles — ${length} caracteres`)
-    .setDescription(
-      available.map(u => `\`${u}\``).join('\n') +
-      '\n\n> Comprobados con la API de Discord. Actúa rápido, pueden tomarse en cualquier momento.'
-    )
-    .setColor(0x57f287)
-    .setFooter({ text: `${available.length} nombre${available.length > 1 ? 's' : ''} encontrado${available.length > 1 ? 's' : ''}` })
-    .setTimestamp();
-
-  await interaction.editReply({ embeds: [embed] });
 }
 
 async function handleSay(message, args) {

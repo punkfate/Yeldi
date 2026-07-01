@@ -294,10 +294,23 @@ function buildNewTicketEmbed(ticketNumber, category, member, fields) {
   const label = CATEGORY_LABELS[category] || '🎫 Ticket';
   const color = CATEGORY_COLORS[category] || 0x5865f2;
 
+  const FORM_LINK = 'https://docs.google.com/forms/d/1aEH3rfgI23UCZZ765cXKe_aLpZvdxKy3KgwUEfTctRw/viewform';
+
   const descriptions = {
     report: `¡Hola ${member}! Tu reporte ha sido recibido.\nEl staff lo revisará lo antes posible.`,
     general: `¡Hola ${member}! Tu ticket ha sido creado.\nDescribe tu situación y el staff te atenderá pronto.`,
-    postulation: `¡Hola ${member}! Tu solicitud de postulación ha sido recibida.\nEl staff revisará tu candidatura.`
+    postulation: [
+      `¡Hola ${member}! Para completar tu postulación debes rellenar el formulario oficial:`,
+      ``,
+      `**[📝 Formulario de Postulación](${FORM_LINK})**`,
+      ``,
+      `**📋 Normas de postulación:**`,
+      `> • Rellena el formulario con información **verídica** y detallada.`,
+      `> • Envía el formulario **una sola vez**, no lo repitas.`,
+      `> • No insistas al staff por el estado de tu postulación.`,
+      `> • Debes cumplir los requisitos del servidor para ser aceptado.`,
+      `> • El staff te contactará si tu candidatura es aceptada.`
+    ].join('\n')
   };
 
   const embed = new EmbedBuilder()
@@ -335,10 +348,23 @@ function buildTicketEmbed(ticket, ticketNumber, openerId, claimedMention) {
   const label = CATEGORY_LABELS[ticket.category] || '🎫 Ticket';
   const color = isClaimed ? 0xfee75c : (CATEGORY_COLORS[ticket.category] || 0x5865f2);
 
+  const FORM_LINK = 'https://docs.google.com/forms/d/1aEH3rfgI23UCZZ765cXKe_aLpZvdxKy3KgwUEfTctRw/viewform';
+
   const descriptions = {
     report: `Tu reporte ha sido recibido.\nEl staff lo revisará lo antes posible.`,
     general: `Tu ticket ha sido creado.\nEl staff te atenderá pronto.`,
-    postulation: `Tu solicitud de postulación ha sido recibida.\nEl staff revisará tu candidatura.`
+    postulation: [
+      `Para completar tu postulación rellena el formulario oficial:`,
+      ``,
+      `**[📝 Formulario de Postulación](${FORM_LINK})**`,
+      ``,
+      `**📋 Normas de postulación:**`,
+      `> • Rellena el formulario con información **verídica** y detallada.`,
+      `> • Envía el formulario **una sola vez**, no lo repitas.`,
+      `> • No insistas al staff por el estado de tu postulación.`,
+      `> • Debes cumplir los requisitos del servidor para ser aceptado.`,
+      `> • El staff te contactará si tu candidatura es aceptada.`
+    ].join('\n')
   };
 
   const embed = new EmbedBuilder()

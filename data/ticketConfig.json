@@ -1,8 +1,18 @@
 {
   "1439778522393481287": {
     "staffRoles": [],
-    "tickets": {},
-    "ticketCounter": 5,
+    "tickets": {
+      "1521920444943306752": {
+        "userId": "817486738145542174",
+        "claimedBy": null,
+        "claimedByTag": null,
+        "ticketNumber": 7,
+        "category": "postulation",
+        "fields": {},
+        "createdAt": 1782924510122
+      }
+    },
+    "ticketCounter": 7,
     "transcriptChannel": "1443269008559444039"
   }
 }
