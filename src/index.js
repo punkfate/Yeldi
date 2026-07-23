@@ -72,7 +72,75 @@ const slashCommands = [
         .addChannelOption(option =>
           option.setName('canal')
             .setDescription('El canal para las transcripciones')
-            .setRequired(true)))
+            .setRequired(true))),
+  new SlashCommandBuilder()
+    .setName('hola')
+    .setDescription('El bot te saluda'),
+  new SlashCommandBuilder()
+    .setName('info')
+    .setDescription('Muestra información del servidor'),
+  new SlashCommandBuilder()
+    .setName('clear')
+    .setDescription('Borra mensajes del canal')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addIntegerOption(option =>
+      option.setName('cantidad')
+        .setDescription('Número de mensajes a borrar (máx 100)')
+        .setMinValue(1)
+        .setMaxValue(100)
+        .setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('kick')
+    .setDescription('Expulsa a un miembro del servidor')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addUserOption(option =>
+      option.setName('miembro')
+        .setDescription('Miembro a expulsar')
+        .setRequired(true))
+    .addStringOption(option =>
+      option.setName('razon')
+        .setDescription('Razón de la expulsión')
+        .setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('ban')
+    .setDescription('Banea a un miembro del servidor')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addUserOption(option =>
+      option.setName('miembro')
+        .setDescription('Miembro a banear')
+        .setRequired(true))
+    .addStringOption(option =>
+      option.setName('razon')
+        .setDescription('Razón del baneo')
+        .setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('unban')
+    .setDescription('Desbanea a un usuario por su ID')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addStringOption(option =>
+      option.setName('id')
+        .setDescription('ID del usuario a desbanear')
+        .setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('mute')
+    .setDescription('Silencia a un miembro del servidor')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addUserOption(option =>
+      option.setName('miembro')
+        .setDescription('Miembro a silenciar')
+        .setRequired(true))
+    .addStringOption(option =>
+      option.setName('razon')
+        .setDescription('Razón del silencio')
+        .setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('unmute')
+    .setDescription('Quita el silencio a un miembro')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addUserOption(option =>
+      option.setName('miembro')
+        .setDescription('Miembro al que quitar el silencio')
+        .setRequired(true)),
 ];
 
 function isAdmin(member) {
@@ -205,6 +273,30 @@ async function main() {
               });
             }
             break;
+          case 'hola':
+            await interaction.reply(`👋 ¡Hola, ${interaction.user}!`);
+            break;
+          case 'info':
+            await handleSlashInfo(interaction);
+            break;
+          case 'clear':
+            await handleSlashClear(interaction);
+            break;
+          case 'kick':
+            await handleSlashKick(interaction);
+            break;
+          case 'ban':
+            await handleSlashBan(interaction);
+            break;
+          case 'unban':
+            await handleSlashUnban(interaction);
+            break;
+          case 'mute':
+            await handleSlashMute(interaction);
+            break;
+          case 'unmute':
+            await handleSlashUnmute(interaction);
+            break;
         }
       } catch (error) {
         console.error('Error al manejar la interacción:', error);
@@ -233,6 +325,16 @@ async function main() {
         return;
       }
 
+      if (command === 'hola') {
+        await message.reply(`👋 ¡Hola, ${message.author}!`);
+        return;
+      }
+
+      if (command === 'info') {
+        await handleInfoMsg(message);
+        return;
+      }
+
       if (!message.member || !isAdmin(message.member)) {
         await message.reply('Necesitas permisos de Administrador para usar este bot.');
         return;
@@ -251,6 +353,24 @@ async function main() {
             break;
           case 'help':
             await handleHelp(message);
+            break;
+          case 'clear':
+            await handleClearMsg(message, args);
+            break;
+          case 'kick':
+            await handleKickMsg(message, args);
+            break;
+          case 'ban':
+            await handleBanMsg(message, args);
+            break;
+          case 'unban':
+            await handleUnbanMsg(message, args);
+            break;
+          case 'mute':
+            await handleMuteMsg(message, args);
+            break;
+          case 'unmute':
+            await handleUnmuteMsg(message, args);
             break;
           default:
             await message.reply(`Comando desconocido: \`${command}\`. Usa \`!help\` o \`/help\` para ver los comandos disponibles.`);
@@ -320,22 +440,176 @@ async function handleSlashHelp(interaction) {
 **🤖 Comandos del Bot**
 
 **🎫 Sistema de Tickets:**
-\`/tickets panel\` — Publicar el panel de tickets en este canal *(solo admins)*
-\`/roleadd staff @rol\` — Agregar un rol de staff para tickets *(solo admins)*
-\`/transcript channel #canal\` — Configurar canal de transcripciones *(solo admins)*
+\`/tickets panel\` — Publicar el panel de tickets *(solo admins)*
+\`/roleadd staff @rol\` — Agregar rol de staff *(solo admins)*
+\`/transcript channel #canal\` — Canal de transcripciones *(solo admins)*
 
-**💬 Comandos Generales:**
-\`/say #canal <mensaje>\` — Enviar un mensaje a un canal *(solo admins)*
-\`/ping\` — Comprobar la latencia del bot
-\`/lock\` — Bloquear el canal actual *(solo admins)*
-\`/unlock\` — Desbloquear el canal actual *(solo admins)*
-\`/help\` — Mostrar esta ayuda
+**🛡️ Moderación:**
+\`/kick @user [razón]\` • \`/ban @user [razón]\` • \`/unban <ID>\`
+\`/mute @user [razón]\` • \`/unmute @user\` • \`/clear [n]\`
+
+**💬 Generales:**
+\`/hola\` • \`/info\` • \`/ping\`
+\`/say #canal <mensaje>\` • \`/lock\` • \`/unlock\` • \`/help\`
 
 **Prefijo \`!\`:**
-\`!say\` • \`!ping\` • \`!lock\` • \`!unlock\` • \`!help\`
+\`!hola\` • \`!info\` • \`!ping\`
+\`!kick\` • \`!ban\` • \`!unban\` • \`!mute\` • \`!unmute\` • \`!clear\`
+\`!say\` • \`!lock\` • \`!unlock\` • \`!help\`
 `;
 
   await interaction.reply({ content: helpMessage, ephemeral: true });
+}
+
+// ── Slash handlers nuevos ────────────────────────────────
+
+async function handleSlashInfo(interaction) {
+  const guild = interaction.guild;
+  const { EmbedBuilder } = await import('discord.js');
+  const embed = new EmbedBuilder()
+    .setTitle(`📊 Info de ${guild.name}`)
+    .setColor(0x5865f2)
+    .addFields(
+      { name: '👥 Miembros', value: `${guild.memberCount}`, inline: true },
+      { name: '💬 Canales', value: `${guild.channels.cache.size}`, inline: true },
+      { name: '🎭 Roles', value: `${guild.roles.cache.size}`, inline: true }
+    );
+  if (guild.iconURL()) embed.setThumbnail(guild.iconURL());
+  await interaction.reply({ embeds: [embed] });
+}
+
+async function handleSlashClear(interaction) {
+  const cantidad = interaction.options.getInteger('cantidad') ?? 5;
+  await interaction.deferReply({ ephemeral: true });
+  const deleted = await interaction.channel.bulkDelete(cantidad, true);
+  await interaction.editReply(`🗑️ Se borraron **${deleted.size}** mensajes.`);
+}
+
+async function handleSlashKick(interaction) {
+  const miembro = interaction.options.getMember('miembro');
+  const razon = interaction.options.getString('razon') ?? 'Sin razón especificada';
+  await miembro.kick(razon);
+  await interaction.reply({ content: `👢 **${miembro.user.tag}** ha sido expulsado. Razón: ${razon}`, ephemeral: true });
+}
+
+async function handleSlashBan(interaction) {
+  const miembro = interaction.options.getMember('miembro');
+  const razon = interaction.options.getString('razon') ?? 'Sin razón especificada';
+  await miembro.ban({ reason: razon });
+  await interaction.reply({ content: `🔨 **${miembro.user.tag}** ha sido baneado. Razón: ${razon}`, ephemeral: true });
+}
+
+async function handleSlashUnban(interaction) {
+  const id = interaction.options.getString('id');
+  try {
+    await interaction.guild.members.unban(id);
+    await interaction.reply({ content: `✅ Usuario con ID **${id}** desbaneado.`, ephemeral: true });
+  } catch {
+    await interaction.reply({ content: '❌ No se encontró ese usuario en la lista de baneados.', ephemeral: true });
+  }
+}
+
+async function handleSlashMute(interaction) {
+  const miembro = interaction.options.getMember('miembro');
+  const razon = interaction.options.getString('razon') ?? 'Sin razón especificada';
+  let role = interaction.guild.roles.cache.find(r => r.name === 'Muted');
+  if (!role) {
+    role = await interaction.guild.roles.create({ name: 'Muted', permissions: [] });
+    for (const channel of interaction.guild.channels.cache.values()) {
+      await channel.permissionOverwrites.edit(role, { SendMessages: false, Speak: false }).catch(() => {});
+    }
+  }
+  await miembro.roles.add(role, razon);
+  await interaction.reply({ content: `🔇 **${miembro.user.tag}** ha sido silenciado. Razón: ${razon}`, ephemeral: true });
+}
+
+async function handleSlashUnmute(interaction) {
+  const miembro = interaction.options.getMember('miembro');
+  const role = interaction.guild.roles.cache.find(r => r.name === 'Muted');
+  if (role && miembro.roles.cache.has(role.id)) {
+    await miembro.roles.remove(role);
+    await interaction.reply({ content: `🔊 **${miembro.user.tag}** ya puede hablar de nuevo.`, ephemeral: true });
+  } else {
+    await interaction.reply({ content: '❌ Ese miembro no está silenciado.', ephemeral: true });
+  }
+}
+
+// ── Prefijo handlers nuevos ──────────────────────────────
+
+async function handleInfoMsg(message) {
+  const guild = message.guild;
+  const { EmbedBuilder } = await import('discord.js');
+  const embed = new EmbedBuilder()
+    .setTitle(`📊 Info de ${guild.name}`)
+    .setColor(0x5865f2)
+    .addFields(
+      { name: '👥 Miembros', value: `${guild.memberCount}`, inline: true },
+      { name: '💬 Canales', value: `${guild.channels.cache.size}`, inline: true },
+      { name: '🎭 Roles', value: `${guild.roles.cache.size}`, inline: true }
+    );
+  if (guild.iconURL()) embed.setThumbnail(guild.iconURL());
+  await message.reply({ embeds: [embed] });
+}
+
+async function handleClearMsg(message, args) {
+  const cantidad = parseInt(args[0]) || 5;
+  const deleted = await message.channel.bulkDelete(Math.min(cantidad + 1, 101), true);
+  const msg = await message.channel.send(`🗑️ Se borraron **${deleted.size - 1}** mensajes.`);
+  setTimeout(() => msg.delete().catch(() => {}), 4000);
+}
+
+async function handleKickMsg(message, args) {
+  const miembro = message.mentions.members.first();
+  if (!miembro) { await message.reply('Menciona a un miembro. Uso: `!kick @usuario [razón]`'); return; }
+  const razon = args.slice(1).join(' ') || 'Sin razón especificada';
+  await miembro.kick(razon);
+  await message.reply(`👢 **${miembro.user.tag}** ha sido expulsado. Razón: ${razon}`);
+}
+
+async function handleBanMsg(message, args) {
+  const miembro = message.mentions.members.first();
+  if (!miembro) { await message.reply('Menciona a un miembro. Uso: `!ban @usuario [razón]`'); return; }
+  const razon = args.slice(1).join(' ') || 'Sin razón especificada';
+  await miembro.ban({ reason: razon });
+  await message.reply(`🔨 **${miembro.user.tag}** ha sido baneado. Razón: ${razon}`);
+}
+
+async function handleUnbanMsg(message, args) {
+  const id = args[0];
+  if (!id) { await message.reply('Proporciona la ID del usuario. Uso: `!unban <ID>`'); return; }
+  try {
+    await message.guild.members.unban(id);
+    await message.reply(`✅ Usuario con ID **${id}** desbaneado.`);
+  } catch {
+    await message.reply('❌ No se encontró ese usuario en la lista de baneados.');
+  }
+}
+
+async function handleMuteMsg(message, args) {
+  const miembro = message.mentions.members.first();
+  if (!miembro) { await message.reply('Menciona a un miembro. Uso: `!mute @usuario [razón]`'); return; }
+  const razon = args.slice(1).join(' ') || 'Sin razón especificada';
+  let role = message.guild.roles.cache.find(r => r.name === 'Muted');
+  if (!role) {
+    role = await message.guild.roles.create({ name: 'Muted', permissions: [] });
+    for (const channel of message.guild.channels.cache.values()) {
+      await channel.permissionOverwrites.edit(role, { SendMessages: false, Speak: false }).catch(() => {});
+    }
+  }
+  await miembro.roles.add(role, razon);
+  await message.reply(`🔇 **${miembro.user.tag}** ha sido silenciado. Razón: ${razon}`);
+}
+
+async function handleUnmuteMsg(message, args) {
+  const miembro = message.mentions.members.first();
+  if (!miembro) { await message.reply('Menciona a un miembro. Uso: `!unmute @usuario`'); return; }
+  const role = message.guild.roles.cache.find(r => r.name === 'Muted');
+  if (role && miembro.roles.cache.has(role.id)) {
+    await miembro.roles.remove(role);
+    await message.reply(`🔊 **${miembro.user.tag}** ya puede hablar de nuevo.`);
+  } else {
+    await message.reply('❌ Ese miembro no está silenciado.');
+  }
 }
 
 async function handleSay(message, args) {
