@@ -1,26 +1,7 @@
 {
   "1439778522393481287": {
     "staffRoles": [],
-    "tickets": {
-      "1523273619164237867": {
-        "userId": "983450373190717462",
-        "claimedBy": null,
-        "claimedByTag": null,
-        "ticketNumber": 9,
-        "category": "postulation",
-        "fields": {},
-        "createdAt": 1783247132063
-      },
-      "1523276090242633768": {
-        "userId": "1009510557512118364",
-        "claimedBy": null,
-        "claimedByTag": null,
-        "ticketNumber": 10,
-        "category": "postulation",
-        "fields": {},
-        "createdAt": 1783247721129
-      }
-    },
+    "tickets": {},
     "ticketCounter": 10,
     "transcriptChannel": "1443269008559444039"
   }
