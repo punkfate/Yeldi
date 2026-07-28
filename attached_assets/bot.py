@@ -494,12 +494,18 @@ async def open_ticket(interaction: discord.Interaction, category: str, fields: d
         view = TicketButtonView()
         await ticket_channel.send(content=member.mention, embeds=[embed], view=view)
 
-        await interaction.edit_original_response(content=f"✅ Tu ticket ha sido creado: {ticket_channel.mention}", view=None)
+        await interaction.followup.send(
+            content=f"✅ Tu ticket ha sido creado: {ticket_channel.mention}",
+            ephemeral=True
+        )
 
     except Exception as e:
         print(f"Error al crear ticket: {e}")
         try:
-            await interaction.edit_original_response(content="❌ No se pudo crear el ticket. Verifica los permisos del bot.", view=None)
+            await interaction.followup.send(
+                content="❌ No se pudo crear el ticket. Verifica los permisos del bot.",
+                ephemeral=True
+            )
         except Exception:
             pass
 
