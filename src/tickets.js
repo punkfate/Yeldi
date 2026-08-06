@@ -35,6 +35,114 @@ const CATEGORY_COLORS = {
   postulation: 0x57f287
 };
 
+const FORM_LINK_2 = 'https://docs.google.com/forms/d/1Oqsby4OXS2UDPKsF-bAs4GjttHSoBHELkP--_Mujs8w/viewform';
+
+export async function handleTicketsPanel2(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+
+  const embed = new EmbedBuilder()
+    .setTitle('🎫 Sistema de Tickets')
+    .setDescription(
+      'Selecciona la categoría correspondiente a tu consulta en el menú de abajo.\nUn miembro del staff te atenderá lo antes posible.'
+    )
+    .addFields({
+      name: '📋 Normas del Sistema de Tickets',
+      value: [
+        '> • Sé respetuoso con el staff y los demás usuarios en todo momento.',
+        '> • No abras tickets innecesarios, de broma o spam.',
+        '> • Abre **un solo ticket** por asunto, no duplicados.',
+        '> • Proporciona información clara y detallada en tu ticket.',
+        '> • Si tu ticket es un reporte, incluye evidencia si es posible.',
+        '> • Espera la respuesta del staff, no insistas de forma repetitiva.'
+      ].join('\n')
+    })
+    .setColor(0x5865f2)
+    .setFooter({ text: 'Usa el menú desplegable para abrir tu ticket' })
+    .setTimestamp();
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('ticket_category_2')
+    .setPlaceholder('📂 Selecciona una categoría...')
+    .addOptions(
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Reportes')
+        .setDescription('Reporta a un usuario que haya infringido las normas del servidor')
+        .setEmoji('🚨')
+        .setValue('report'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Dudas Generales')
+        .setDescription('¿Tienes una pregunta o necesitas ayuda? Abre un ticket aquí')
+        .setEmoji('❓')
+        .setValue('general'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Postulaciones')
+        .setDescription('¿Quieres unirte al equipo de staff? Postúlate aquí')
+        .setEmoji('📝')
+        .setValue('postulation')
+    );
+
+  const row = new ActionRowBuilder().addComponents(select);
+
+  try {
+    const channel = interaction.channel ?? await interaction.client.channels.fetch(interaction.channelId);
+    await channel.send({ embeds: [embed], components: [row] });
+    await interaction.editReply({ content: '✅ ¡Panel de tickets 2 publicado!' });
+  } catch (error) {
+    console.error('Error al enviar el panel de tickets 2:', error);
+    await interaction.editReply({ content: '❌ No se pudo publicar el panel. Verifica los permisos del bot en este canal.' });
+  }
+}
+
+export async function handleCategorySelect2(interaction) {
+  const category = interaction.values[0];
+
+  const openChannel = hasOpenTicket(interaction);
+  if (openChannel) {
+    await interaction.reply({ content: `❌ Ya tienes un ticket abierto: ${openChannel}`, ephemeral: true });
+    return;
+  }
+
+  if (category === 'report') {
+    const userSelect = new UserSelectMenuBuilder()
+      .setCustomId('report_user_select')
+      .setPlaceholder('Busca y selecciona al usuario a reportar...')
+      .setMinValues(1)
+      .setMaxValues(1);
+
+    const row = new ActionRowBuilder().addComponents(userSelect);
+
+    await interaction.reply({
+      content: '**🚨 Reporte — Paso 1/2:** Selecciona al usuario que quieres reportar:',
+      components: [row],
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (category === 'general') {
+    const modal = new ModalBuilder()
+      .setCustomId('modal_ticket_general')
+      .setTitle('❓ Duda General');
+
+    const reasonInput = new TextInputBuilder()
+      .setCustomId('general_reason')
+      .setLabel('¿Cuál es el motivo de tu ticket?')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Describe tu duda o problema con el mayor detalle posible.')
+      .setRequired(true)
+      .setMaxLength(1000);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+    await interaction.showModal(modal);
+    return;
+  }
+
+  if (category === 'postulation') {
+    await interaction.deferReply({ ephemeral: true });
+    await openTicket(interaction, 'postulation', {}, FORM_LINK_2);
+  }
+}
+
 export async function handleTicketsPanel(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
@@ -204,7 +312,7 @@ export async function handleModalGeneral(interaction) {
   await openTicket(interaction, 'general', { generalReason });
 }
 
-async function openTicket(interaction, category, fields) {
+async function openTicket(interaction, category, fields, formLink) {
   const guild = interaction.guild;
   const member = interaction.member;
   const guildConfig = getGuildConfig(guild.id);
@@ -247,9 +355,10 @@ async function openTicket(interaction, category, fields) {
       permissionOverwrites
     });
 
+    if (formLink) fields.formLink = formLink;
     createTicket(guild.id, ticketChannel.id, member.user.id, ticketNumber, category, fields);
 
-    const embed = buildNewTicketEmbed(ticketNumber, category, member, fields);
+    const embed = buildNewTicketEmbed(ticketNumber, category, member, fields, formLink);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -289,12 +398,12 @@ async function openTicket(interaction, category, fields) {
   }
 }
 
-function buildNewTicketEmbed(ticketNumber, category, member, fields) {
+function buildNewTicketEmbed(ticketNumber, category, member, fields, formLink) {
   const num = ticketNumber.toString().padStart(4, '0');
   const label = CATEGORY_LABELS[category] || '🎫 Ticket';
   const color = CATEGORY_COLORS[category] || 0x5865f2;
 
-  const FORM_LINK = 'https://docs.google.com/forms/d/1aEH3rfgI23UCZZ765cXKe_aLpZvdxKy3KgwUEfTctRw/viewform';
+  const FORM_LINK = formLink || fields.formLink || 'https://docs.google.com/forms/d/1aEH3rfgI23UCZZ765cXKe_aLpZvdxKy3KgwUEfTctRw/viewform';
 
   const descriptions = {
     report: `¡Hola ${member}! Tu reporte ha sido recibido.\nEl staff lo revisará lo antes posible.`,
@@ -348,7 +457,7 @@ function buildTicketEmbed(ticket, ticketNumber, openerId, claimedMention) {
   const label = CATEGORY_LABELS[ticket.category] || '🎫 Ticket';
   const color = isClaimed ? 0xfee75c : (CATEGORY_COLORS[ticket.category] || 0x5865f2);
 
-  const FORM_LINK = 'https://docs.google.com/forms/d/1aEH3rfgI23UCZZ765cXKe_aLpZvdxKy3KgwUEfTctRw/viewform';
+  const FORM_LINK = ticket.fields?.formLink || 'https://docs.google.com/forms/d/1aEH3rfgI23UCZZ765cXKe_aLpZvdxKy3KgwUEfTctRw/viewform';
 
   const descriptions = {
     report: `Tu reporte ha sido recibido.\nEl staff lo revisará lo antes posible.`,

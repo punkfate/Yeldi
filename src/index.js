@@ -4,7 +4,9 @@ import { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } from 'discord.
 import { addStaffRole, setTranscriptChannel } from './ticketConfig.js';
 import {
   handleTicketsPanel,
+  handleTicketsPanel2,
   handleCategorySelect,
+  handleCategorySelect2,
   handleReportUserSelect,
   handleModalReport,
   handleModalGeneral,
@@ -50,7 +52,10 @@ const slashCommands = [
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addSubcommand(sub =>
       sub.setName('panel')
-        .setDescription('Publicar el panel de tickets en este canal')),
+        .setDescription('Publicar el panel de tickets en este canal'))
+    .addSubcommand(sub =>
+      sub.setName('panel2')
+        .setDescription('Publicar el panel de tickets 2 en este canal')),
   new SlashCommandBuilder()
     .setName('roleadd')
     .setDescription('Gestionar permisos de roles')
@@ -201,6 +206,8 @@ async function main() {
         if (interaction.isStringSelectMenu()) {
           if (interaction.customId === 'ticket_category') {
             await handleCategorySelect(interaction);
+          } else if (interaction.customId === 'ticket_category_2') {
+            await handleCategorySelect2(interaction);
           } else if (interaction.customId === 'report_user_select') {
             await handleReportUserSelect(interaction);
           }
@@ -244,6 +251,8 @@ async function main() {
           case 'tickets':
             if (interaction.options.getSubcommand() === 'panel') {
               await handleTicketsPanel(interaction);
+            } else if (interaction.options.getSubcommand() === 'panel2') {
+              await handleTicketsPanel2(interaction);
             }
             break;
           case 'roleadd':
