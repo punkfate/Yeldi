@@ -20,7 +20,8 @@ if not TOKEN:
 
 PORT = int(os.environ.get("PORT", 10000))
 CONFIG_PATH = "ticketConfig.json"
-FORM_LINK = "https://docs.google.com/forms/d/1aEH3rfgI23UCZZ765cXKe_aLpZvdxKy3KgwUEfTctRw/viewform"
+FORM_LINK  = "https://docs.google.com/forms/d/1aEH3rfgI23UCZZ765cXKe_aLpZvdxKy3KgwUEfTctRw/viewform"
+FORM_LINK_2 = "https://docs.google.com/forms/d/1Oqsby4OXS2UDPKsF-bAs4GjttHSoBHELkP--_Mujs8w/viewform"
 
 CATEGORY_LABELS = {"report": "🚨 Reporte", "general": "❓ Duda General", "postulation": "📝 Postulación"}
 CATEGORY_COLORS = {"report": 0xed4245, "general": 0x5865f2, "postulation": 0x57f287}
@@ -153,10 +154,11 @@ def build_ticket_embed(ticket, ticket_number, opener_id, claimed_mention=None):
     label = CATEGORY_LABELS.get(ticket["category"], "🎫 Ticket")
     color = 0xfee75c if is_claimed else CATEGORY_COLORS.get(ticket["category"], 0x5865f2)
 
+    used_link = ticket.get("formLink", FORM_LINK)
     postulation_desc = "\n".join([
         f"Para completar tu postulación rellena el formulario oficial:",
         f"",
-        f"**[📝 Formulario de Postulación]({FORM_LINK})**",
+        f"**[📝 Formulario de Postulación]({used_link})**",
         f"",
         f"**📋 Normas de postulación:**",
         f"> • Rellena el formulario con información **verídica** y detallada.",
@@ -196,9 +198,10 @@ def build_ticket_embed(ticket, ticket_number, opener_id, claimed_mention=None):
 # ── Modales ───────────────────────────────────────────────
 
 class ReportModal(discord.ui.Modal, title="🚨 Reporte — Paso 2/2"):
-    def __init__(self, reported_user_id, reported_display):
+    def __init__(self, reported_user_id, reported_display, form_link=None):
         super().__init__()
         self.reported_user_id = reported_user_id
+        self.form_link = form_link or FORM_LINK
         self.reported_display_field = discord.ui.TextInput(
             label="Usuario a reportar",
             default=reported_display,
@@ -221,26 +224,31 @@ class ReportModal(discord.ui.Modal, title="🚨 Reporte — Paso 2/2"):
         await open_ticket(interaction, "report", {
             "reportedUser": reported_user,
             "reportReason": self.reason.value
-        })
+        }, form_link=self.form_link)
 
 class GeneralModal(discord.ui.Modal, title="❓ Duda General"):
-    reason = discord.ui.TextInput(
-        label="¿Cuál es el motivo de tu ticket?",
-        style=discord.TextStyle.paragraph,
-        placeholder="Describe tu duda o problema con el mayor detalle posible.",
-        required=True,
-        max_length=1000
-    )
+    def __init__(self, form_link=None):
+        super().__init__()
+        self.form_link = form_link or FORM_LINK
+        self.reason = discord.ui.TextInput(
+            label="¿Cuál es el motivo de tu ticket?",
+            style=discord.TextStyle.paragraph,
+            placeholder="Describe tu duda o problema con el mayor detalle posible.",
+            required=True,
+            max_length=1000
+        )
+        self.add_item(self.reason)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        await open_ticket(interaction, "general", {"generalReason": self.reason.value})
+        await open_ticket(interaction, "general", {"generalReason": self.reason.value}, form_link=self.form_link)
 
 # ── Views ─────────────────────────────────────────────────
 
 class ReportUserSelect(discord.ui.View):
-    def __init__(self):
+    def __init__(self, form_link=None):
         super().__init__(timeout=120)
+        self.form_link = form_link or FORM_LINK
 
     @discord.ui.select(
         cls=discord.ui.UserSelect,
@@ -251,7 +259,7 @@ class ReportUserSelect(discord.ui.View):
     async def select_user(self, interaction: discord.Interaction, select: discord.ui.UserSelect):
         user = select.values[0]
         display = f"{user.name} ({user.id})"
-        await interaction.response.send_modal(ReportModal(user.id, display))
+        await interaction.response.send_modal(ReportModal(user.id, display, form_link=self.form_link))
 
 class CategorySelectView(discord.ui.View):
     def __init__(self):
@@ -274,17 +282,48 @@ class CategorySelectView(discord.ui.View):
             return
 
         if category == "report":
-            view = ReportUserSelect()
+            view = ReportUserSelect(form_link=FORM_LINK)
             await interaction.response.send_message(
                 "**🚨 Reporte — Paso 1/2:** Selecciona al usuario que quieres reportar:",
-                view=view,
-                ephemeral=True
+                view=view, ephemeral=True
             )
         elif category == "general":
-            await interaction.response.send_modal(GeneralModal())
+            await interaction.response.send_modal(GeneralModal(form_link=FORM_LINK))
         elif category == "postulation":
             await interaction.response.defer(ephemeral=True)
-            await open_ticket(interaction, "postulation", {})
+            await open_ticket(interaction, "postulation", {}, form_link=FORM_LINK)
+
+class CategorySelectView2(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.select(
+        custom_id="ticket_category_2",
+        placeholder="📂 Selecciona una categoría...",
+        options=[
+            discord.SelectOption(label="Reportes", description="Reporta a un usuario que haya infringido las normas del servidor", emoji="🚨", value="report"),
+            discord.SelectOption(label="Dudas Generales", description="¿Tienes una pregunta o necesitas ayuda? Abre un ticket aquí", emoji="❓", value="general"),
+            discord.SelectOption(label="Postulaciones", description="¿Quieres unirte al equipo de staff? Postúlate aquí", emoji="📝", value="postulation"),
+        ]
+    )
+    async def select_category(self, interaction: discord.Interaction, select: discord.ui.Select):
+        category = select.values[0]
+        existing = has_open_ticket(interaction.guild, interaction.user.id)
+        if existing:
+            await interaction.response.send_message(f"❌ Ya tienes un ticket abierto: {existing.mention}", ephemeral=True)
+            return
+
+        if category == "report":
+            view = ReportUserSelect(form_link=FORM_LINK_2)
+            await interaction.response.send_message(
+                "**🚨 Reporte — Paso 1/2:** Selecciona al usuario que quieres reportar:",
+                view=view, ephemeral=True
+            )
+        elif category == "general":
+            await interaction.response.send_modal(GeneralModal(form_link=FORM_LINK_2))
+        elif category == "postulation":
+            await interaction.response.defer(ephemeral=True)
+            await open_ticket(interaction, "postulation", {}, form_link=FORM_LINK_2)
 
 def is_staff(member, guild_config):
     if member.guild_permissions.administrator:
@@ -418,7 +457,7 @@ class TicketButtonView(discord.ui.View):
 
 # ── Abrir ticket ──────────────────────────────────────────
 
-async def open_ticket(interaction: discord.Interaction, category: str, fields: dict):
+async def open_ticket(interaction: discord.Interaction, category: str, fields: dict, form_link: str = None):
     guild = interaction.guild
     member = interaction.user
     gc = get_guild_config(guild.id)
@@ -448,6 +487,8 @@ async def open_ticket(interaction: discord.Interaction, category: str, fields: d
             category=parent
         )
 
+        used_link = form_link or FORM_LINK
+        fields["formLink"] = used_link
         create_ticket(guild.id, ticket_channel.id, member.id, ticket_number, category, fields)
 
         num = str(ticket_number).zfill(4)
@@ -457,7 +498,7 @@ async def open_ticket(interaction: discord.Interaction, category: str, fields: d
         postulation_desc = "\n".join([
             f"¡Hola {member.mention}! Para completar tu postulación debes rellenar el formulario oficial:",
             f"",
-            f"**[📝 Formulario de Postulación]({FORM_LINK})**",
+            f"**[📝 Formulario de Postulación]({used_link})**",
             f"",
             f"**📋 Normas de postulación:**",
             f"> • Rellena el formulario con información **verídica** y detallada.",
@@ -520,6 +561,7 @@ bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 @bot.event
 async def on_ready():
     bot.add_view(CategorySelectView())
+    bot.add_view(CategorySelectView2())
     bot.add_view(TicketButtonView())
     await bot.tree.sync()
     print(f"✅ Conectado como {bot.user} (ID: {bot.user.id})")
@@ -557,7 +599,36 @@ async def tickets_panel(interaction: discord.Interaction):
     try:
         await interaction.channel.send(embeds=[embed], view=view)
         await interaction.edit_original_response(content="✅ ¡Panel de tickets publicado!")
-    except Exception as e:
+    except Exception:
+        await interaction.edit_original_response(content="❌ No se pudo publicar el panel. Verifica los permisos del bot.")
+
+@tickets_group.command(name="panel2", description="Publicar el panel de tickets 2 en este canal")
+async def tickets_panel2(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    embed = discord.Embed(
+        title="🎫 Sistema de Tickets",
+        description="Selecciona la categoría correspondiente a tu consulta en el menú de abajo.\nUn miembro del staff te atenderá lo antes posible.",
+        color=0x5865f2,
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(
+        name="📋 Normas del Sistema de Tickets",
+        value="\n".join([
+            "> • Sé respetuoso con el staff y los demás usuarios en todo momento.",
+            "> • No abras tickets innecesarios, de broma o spam.",
+            "> • Abre **un solo ticket** por asunto, no duplicados.",
+            "> • Proporciona información clara y detallada en tu ticket.",
+            "> • Si tu ticket es un reporte, incluye evidencia si es posible.",
+            "> • Espera la respuesta del staff, no insistas de forma repetitiva."
+        ]),
+        inline=False
+    )
+    embed.set_footer(text="Usa el menú desplegable para abrir tu ticket")
+    view = CategorySelectView2()
+    try:
+        await interaction.channel.send(embeds=[embed], view=view)
+        await interaction.edit_original_response(content="✅ ¡Panel de tickets 2 publicado!")
+    except Exception:
         await interaction.edit_original_response(content="❌ No se pudo publicar el panel. Verifica los permisos del bot.")
 
 bot.tree.add_command(tickets_group)
