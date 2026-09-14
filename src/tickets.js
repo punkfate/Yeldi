@@ -26,142 +26,51 @@ import {
 const CATEGORY_LABELS = {
   report: '🚨 Reporte',
   general: '❓ Duda General',
-  postulation: '📝 Postulación'
+  admin_support: '🛠️ Soporte de Administración'
 };
 
 const CATEGORY_COLORS = {
   report: 0xed4245,
   general: 0x5865f2,
-  postulation: 0x57f287
+  admin_support: 0x9b59b6
 };
-
-const FORM_LINK_2 = 'https://docs.google.com/forms/d/1Oqsby4OXS2UDPKsF-bAs4GjttHSoBHELkP--_Mujs8w/viewform';
-
-export async function handleTicketsPanel2(interaction) {
-  await interaction.deferReply({ ephemeral: true });
-
-  const embed = new EmbedBuilder()
-    .setTitle('🎫 Sistema de Tickets')
-    .setDescription(
-      'Selecciona la categoría correspondiente a tu consulta en el menú de abajo.\nUn miembro del staff te atenderá lo antes posible.'
-    )
-    .addFields({
-      name: '📋 Normas del Sistema de Tickets',
-      value: [
-        '> • Sé respetuoso con el staff y los demás usuarios en todo momento.',
-        '> • No abras tickets innecesarios, de broma o spam.',
-        '> • Abre **un solo ticket** por asunto, no duplicados.',
-        '> • Proporciona información clara y detallada en tu ticket.',
-        '> • Si tu ticket es un reporte, incluye evidencia si es posible.',
-        '> • Espera la respuesta del staff, no insistas de forma repetitiva.'
-      ].join('\n')
-    })
-    .setColor(0x5865f2)
-    .setFooter({ text: 'Usa el menú desplegable para abrir tu ticket' })
-    .setTimestamp();
-
-  const select = new StringSelectMenuBuilder()
-    .setCustomId('ticket_category_2')
-    .setPlaceholder('📂 Selecciona una categoría...')
-    .addOptions(
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Reportes')
-        .setDescription('Reporta a un usuario que haya infringido las normas del servidor')
-        .setEmoji('🚨')
-        .setValue('report'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Dudas Generales')
-        .setDescription('¿Tienes una pregunta o necesitas ayuda? Abre un ticket aquí')
-        .setEmoji('❓')
-        .setValue('general'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Postulaciones')
-        .setDescription('¿Quieres unirte al equipo de staff? Postúlate aquí')
-        .setEmoji('📝')
-        .setValue('postulation')
-    );
-
-  const row = new ActionRowBuilder().addComponents(select);
-
-  try {
-    const channel = interaction.channel ?? await interaction.client.channels.fetch(interaction.channelId);
-    await channel.send({ embeds: [embed], components: [row] });
-    await interaction.editReply({ content: '✅ ¡Panel de tickets 2 publicado!' });
-  } catch (error) {
-    console.error('Error al enviar el panel de tickets 2:', error);
-    await interaction.editReply({ content: '❌ No se pudo publicar el panel. Verifica los permisos del bot en este canal.' });
-  }
-}
-
-export async function handleCategorySelect2(interaction) {
-  const category = interaction.values[0];
-
-  const openChannel = hasOpenTicket(interaction);
-  if (openChannel) {
-    await interaction.reply({ content: `❌ Ya tienes un ticket abierto: ${openChannel}`, ephemeral: true });
-    return;
-  }
-
-  if (category === 'report') {
-    const userSelect = new UserSelectMenuBuilder()
-      .setCustomId('report_user_select')
-      .setPlaceholder('Busca y selecciona al usuario a reportar...')
-      .setMinValues(1)
-      .setMaxValues(1);
-
-    const row = new ActionRowBuilder().addComponents(userSelect);
-
-    await interaction.reply({
-      content: '**🚨 Reporte — Paso 1/2:** Selecciona al usuario que quieres reportar:',
-      components: [row],
-      ephemeral: true
-    });
-    return;
-  }
-
-  if (category === 'general') {
-    const modal = new ModalBuilder()
-      .setCustomId('modal_ticket_general')
-      .setTitle('❓ Duda General');
-
-    const reasonInput = new TextInputBuilder()
-      .setCustomId('general_reason')
-      .setLabel('¿Cuál es el motivo de tu ticket?')
-      .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('Describe tu duda o problema con el mayor detalle posible.')
-      .setRequired(true)
-      .setMaxLength(1000);
-
-    modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
-    await interaction.showModal(modal);
-    return;
-  }
-
-  if (category === 'postulation') {
-    await interaction.deferReply({ ephemeral: true });
-    await openTicket(interaction, 'postulation', {}, FORM_LINK_2);
-  }
-}
 
 export async function handleTicketsPanel(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   const embed = new EmbedBuilder()
-    .setTitle('🎫 Sistema de Tickets')
+    .setTitle("🎫 Sistema de Tickets — Jester's Club")
     .setDescription(
-      'Selecciona la categoría correspondiente a tu consulta en el menú de abajo.\nUn miembro del staff te atenderá lo antes posible.'
+      "Bienvenido al sistema oficial de soporte de **Jester's Club**.\nSelecciona la categoría correspondiente a tu consulta en el menú de abajo."
     )
-    .addFields({
-      name: '📋 Normas del Sistema de Tickets',
-      value: [
-        '> • Sé respetuoso con el staff y los demás usuarios en todo momento.',
-        '> • No abras tickets innecesarios, de broma o spam.',
-        '> • Abre **un solo ticket** por asunto, no duplicados.',
-        '> • Proporciona información clara y detallada en tu ticket.',
-        '> • Si tu ticket es un reporte, incluye evidencia si es posible.',
-        '> • Espera la respuesta del staff, no insistas de forma repetitiva.'
-      ].join('\n')
-    })
+    .addFields(
+      {
+        name: '🚨 Reportes',
+        value: 'Para informar sobre usuarios que hayan incumplido las normas del servidor. Incluye todos los detalles y evidencias posibles.',
+        inline: false
+      },
+      {
+        name: '❓ Dudas Generales',
+        value: 'Para preguntas, problemas o ayuda general relacionada con Jester\'s Club.',
+        inline: false
+      },
+      {
+        name: '🛠️ Soporte de Administración',
+        value: 'Para asuntos que necesitan la atención de administradores o managers. Estos tickets son privados y solo los verá el usuario que lo abre, los administradores y los managers.',
+        inline: false
+      },
+      {
+        name: '📋 Normas del Sistema de Tickets',
+        value: [
+          '> • Sé respetuoso con el staff y los demás usuarios en todo momento.',
+          '> • No abras tickets innecesarios, de broma o spam.',
+          '> • Abre **un solo ticket** por asunto, no duplicados.',
+          '> • Proporciona información clara y detallada en tu ticket.',
+          '> • Si tu ticket es un reporte, incluye evidencia si es posible.',
+          '> • Espera la respuesta del staff, no insistas de forma repetitiva.'
+        ].join('\n')
+      }
+    )
     .setColor(0x5865f2)
     .setFooter({ text: 'Usa el menú desplegable para abrir tu ticket' })
     .setTimestamp();
@@ -181,10 +90,10 @@ export async function handleTicketsPanel(interaction) {
         .setEmoji('❓')
         .setValue('general'),
       new StringSelectMenuOptionBuilder()
-        .setLabel('Postulaciones')
-        .setDescription('¿Quieres unirte al equipo de staff? Postúlate aquí')
-        .setEmoji('📝')
-        .setValue('postulation')
+        .setLabel('Soporte de Administración')
+        .setDescription('Contacta con los administradores o managers de Jester\'s Club')
+        .setEmoji('🛠️')
+        .setValue('admin_support')
     );
 
   const row = new ActionRowBuilder().addComponents(select);
@@ -251,9 +160,9 @@ export async function handleCategorySelect(interaction) {
     return;
   }
 
-  if (category === 'postulation') {
+  if (category === 'admin_support') {
     await interaction.deferReply({ ephemeral: true });
-    await openTicket(interaction, 'postulation', {});
+    await openTicket(interaction, 'admin_support', {});
   }
 }
 
@@ -312,13 +221,31 @@ export async function handleModalGeneral(interaction) {
   await openTicket(interaction, 'general', { generalReason });
 }
 
-async function openTicket(interaction, category, fields, formLink) {
+function getManagerRoles(guild, guildConfig) {
+  const configuredRoleIds = new Set(guildConfig.managerRoles || []);
+  return guild.roles.cache.filter(role =>
+    configuredRoleIds.has(role.id) ||
+    ['manager', 'managers'].includes(role.name.trim().toLowerCase())
+  );
+}
+
+function canManageTicket(member, guildConfig, ticket) {
+  if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+
+  if (ticket.category === 'admin_support') {
+    return getManagerRoles(member.guild, guildConfig).some(role => member.roles.cache.has(role.id));
+  }
+
+  return guildConfig.staffRoles.some(roleId => member.roles.cache.has(roleId));
+}
+
+async function openTicket(interaction, category, fields) {
   const guild = interaction.guild;
   const member = interaction.member;
   const guildConfig = getGuildConfig(guild.id);
   const ticketNumber = nextTicketNumber(guild.id);
 
-  const prefixes = { report: 'reporte', general: 'duda', postulation: 'postulacion' };
+  const prefixes = { report: 'reporte', general: 'duda', admin_support: 'soporte-admin' };
   const prefix = prefixes[category] || 'ticket';
   const safeName = member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20) || 'usuario';
   const channelName = `${prefix}-${ticketNumber.toString().padStart(4, '0')}-${safeName}`;
@@ -335,9 +262,15 @@ async function openTicket(interaction, category, fields, formLink) {
     }
   ];
 
-  for (const roleId of guildConfig.staffRoles) {
+  const visibleRoles = category === 'admin_support'
+    ? getManagerRoles(guild, guildConfig)
+    : guildConfig.staffRoles
+        .map(roleId => guild.roles.cache.get(roleId))
+        .filter(Boolean);
+
+  for (const role of visibleRoles) {
     permissionOverwrites.push({
-      id: roleId,
+      id: role.id,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
@@ -355,10 +288,9 @@ async function openTicket(interaction, category, fields, formLink) {
       permissionOverwrites
     });
 
-    if (formLink) fields.formLink = formLink;
     createTicket(guild.id, ticketChannel.id, member.user.id, ticketNumber, category, fields);
 
-    const embed = buildNewTicketEmbed(ticketNumber, category, member, fields, formLink);
+    const embed = buildNewTicketEmbed(ticketNumber, category, member, fields);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -398,28 +330,15 @@ async function openTicket(interaction, category, fields, formLink) {
   }
 }
 
-function buildNewTicketEmbed(ticketNumber, category, member, fields, formLink) {
+function buildNewTicketEmbed(ticketNumber, category, member, fields) {
   const num = ticketNumber.toString().padStart(4, '0');
   const label = CATEGORY_LABELS[category] || '🎫 Ticket';
   const color = CATEGORY_COLORS[category] || 0x5865f2;
 
-  const FORM_LINK = formLink || fields.formLink || 'https://docs.google.com/forms/d/1aEH3rfgI23UCZZ765cXKe_aLpZvdxKy3KgwUEfTctRw/viewform';
-
   const descriptions = {
     report: `¡Hola ${member}! Tu reporte ha sido recibido.\nEl staff lo revisará lo antes posible.`,
     general: `¡Hola ${member}! Tu ticket ha sido creado.\nDescribe tu situación y el staff te atenderá pronto.`,
-    postulation: [
-      `¡Hola ${member}! Para completar tu postulación debes rellenar el formulario oficial:`,
-      ``,
-      `**[📝 Formulario de Postulación](${FORM_LINK})**`,
-      ``,
-      `**📋 Normas de postulación:**`,
-      `> • Rellena el formulario con información **verídica** y detallada.`,
-      `> • Envía el formulario **una sola vez**, no lo repitas.`,
-      `> • No insistas al staff por el estado de tu postulación.`,
-      `> • Debes cumplir los requisitos del servidor para ser aceptado.`,
-      `> • El staff te contactará si tu candidatura es aceptada.`
-    ].join('\n')
+    admin_support: `¡Hola ${member}! Este canal es para asuntos que requieren la atención de los administradores o managers de Jester's Club.`
   };
 
   const embed = new EmbedBuilder()
@@ -448,6 +367,13 @@ function buildNewTicketEmbed(ticketNumber, category, member, fields, formLink) {
     );
   }
 
+  if (category === 'admin_support') {
+    embed.addFields(
+      { name: '\u200b', value: '**— Soporte de Administración —**', inline: false },
+      { name: '🔐 Acceso', value: 'Solo administradores y managers pueden ver y gestionar este ticket.', inline: false }
+    );
+  }
+
   return embed;
 }
 
@@ -457,23 +383,10 @@ function buildTicketEmbed(ticket, ticketNumber, openerId, claimedMention) {
   const label = CATEGORY_LABELS[ticket.category] || '🎫 Ticket';
   const color = isClaimed ? 0xfee75c : (CATEGORY_COLORS[ticket.category] || 0x5865f2);
 
-  const FORM_LINK = ticket.fields?.formLink || 'https://docs.google.com/forms/d/1aEH3rfgI23UCZZ765cXKe_aLpZvdxKy3KgwUEfTctRw/viewform';
-
   const descriptions = {
     report: `Tu reporte ha sido recibido.\nEl staff lo revisará lo antes posible.`,
     general: `Tu ticket ha sido creado.\nEl staff te atenderá pronto.`,
-    postulation: [
-      `Para completar tu postulación rellena el formulario oficial:`,
-      ``,
-      `**[📝 Formulario de Postulación](${FORM_LINK})**`,
-      ``,
-      `**📋 Normas de postulación:**`,
-      `> • Rellena el formulario con información **verídica** y detallada.`,
-      `> • Envía el formulario **una sola vez**, no lo repitas.`,
-      `> • No insistas al staff por el estado de tu postulación.`,
-      `> • Debes cumplir los requisitos del servidor para ser aceptado.`,
-      `> • El staff te contactará si tu candidatura es aceptada.`
-    ].join('\n')
+    admin_support: `Este ticket es para asuntos que requieren la atención de los administradores o managers de Jester's Club.`
   };
 
   const embed = new EmbedBuilder()
@@ -502,6 +415,13 @@ function buildTicketEmbed(ticket, ticketNumber, openerId, claimedMention) {
     );
   }
 
+  if (ticket.category === 'admin_support') {
+    embed.addFields(
+      { name: '\u200b', value: '**— Soporte de Administración —**', inline: false },
+      { name: '🔐 Acceso', value: 'Solo administradores y managers pueden ver y gestionar este ticket.', inline: false }
+    );
+  }
+
   return embed;
 }
 
@@ -517,12 +437,10 @@ export async function handleClaimTicket(interaction) {
   }
 
   const guildConfig = getGuildConfig(guild.id);
-  const isStaff =
-    member.permissions.has(PermissionFlagsBits.Administrator) ||
-    guildConfig.staffRoles.some((r) => member.roles.cache.has(r));
+  const isStaff = canManageTicket(member, guildConfig, ticket);
 
   if (!isStaff) {
-    await interaction.reply({ content: '❌ Solo el staff puede reclamar tickets.', ephemeral: true });
+    await interaction.reply({ content: '❌ No tienes permiso para reclamar este ticket.', ephemeral: true });
     return;
   }
 
@@ -558,12 +476,10 @@ export async function handleUnclaimTicket(interaction) {
   }
 
   const guildConfig = getGuildConfig(guild.id);
-  const isStaff =
-    member.permissions.has(PermissionFlagsBits.Administrator) ||
-    guildConfig.staffRoles.some((r) => member.roles.cache.has(r));
+  const isStaff = canManageTicket(member, guildConfig, ticket);
 
   if (!isStaff) {
-    await interaction.reply({ content: '❌ Solo el staff puede liberar tickets.', ephemeral: true });
+    await interaction.reply({ content: '❌ No tienes permiso para liberar este ticket.', ephemeral: true });
     return;
   }
 
@@ -600,8 +516,7 @@ export async function handleCloseTicket(interaction) {
 
   const guildConfig = getGuildConfig(guild.id);
   const isStaff =
-    member.permissions.has(PermissionFlagsBits.Administrator) ||
-    guildConfig.staffRoles.some((r) => member.roles.cache.has(r)) ||
+    canManageTicket(member, guildConfig, ticket) ||
     ticket.userId === member.user.id;
 
   if (!isStaff) {

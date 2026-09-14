@@ -1,12 +1,10 @@
 import { createServer } from 'http';
 import { getDiscordClient } from './discord.js';
 import { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
-import { addStaffRole, setTranscriptChannel } from './ticketConfig.js';
+import { addStaffRole, addManagerRole, setTranscriptChannel } from './ticketConfig.js';
 import {
   handleTicketsPanel,
-  handleTicketsPanel2,
   handleCategorySelect,
-  handleCategorySelect2,
   handleReportUserSelect,
   handleModalReport,
   handleModalGeneral,
@@ -52,10 +50,7 @@ const slashCommands = [
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addSubcommand(sub =>
       sub.setName('panel')
-        .setDescription('Publicar el panel de tickets en este canal'))
-    .addSubcommand(sub =>
-      sub.setName('panel2')
-        .setDescription('Publicar el panel de tickets 2 en este canal')),
+        .setDescription('Publicar el panel de tickets en este canal')),
   new SlashCommandBuilder()
     .setName('roleadd')
     .setDescription('Gestionar permisos de roles')
@@ -66,6 +61,13 @@ const slashCommands = [
         .addRoleOption(option =>
           option.setName('rol')
             .setDescription('El rol a agregar como staff')
+            .setRequired(true)))
+    .addSubcommand(sub =>
+      sub.setName('manager')
+        .setDescription('Agregar un rol de manager para soporte de administración')
+        .addRoleOption(option =>
+          option.setName('rol')
+            .setDescription('El rol cuyos miembros podrán ver soporte de administración')
             .setRequired(true))),
   new SlashCommandBuilder()
     .setName('transcript')
@@ -174,7 +176,16 @@ async function main() {
     const client = await getDiscordClient();
 
     client.on('ready', async () => {
-      console.log(`¡Bot en línea como ${client.user.tag}!`);
+      if (client.user.username !== 'Jester Bot') {
+        await client.user.setUsername('Jester Bot').catch(error => {
+          console.error('No se pudo cambiar el nombre del bot:', error.message);
+        });
+      }
+      client.user.setPresence({
+        activities: [{ name: "Jester's Club", type: 3 }],
+        status: 'online'
+      });
+      console.log(`¡Jester Bot en línea como ${client.user.tag}!`);
       await registerSlashCommands(client);
       console.log('Comandos disponibles:');
       console.log('  /say #canal <mensaje>');
@@ -183,6 +194,7 @@ async function main() {
       console.log('  /help');
       console.log('  /tickets panel');
       console.log('  /roleadd staff @rol');
+      console.log('  /roleadd manager @rol');
       console.log('  /transcript channel #canal');
     });
 
@@ -206,8 +218,6 @@ async function main() {
         if (interaction.isStringSelectMenu()) {
           if (interaction.customId === 'ticket_category') {
             await handleCategorySelect(interaction);
-          } else if (interaction.customId === 'ticket_category_2') {
-            await handleCategorySelect2(interaction);
           } else if (interaction.customId === 'report_user_select') {
             await handleReportUserSelect(interaction);
           }
@@ -251,8 +261,6 @@ async function main() {
           case 'tickets':
             if (interaction.options.getSubcommand() === 'panel') {
               await handleTicketsPanel(interaction);
-            } else if (interaction.options.getSubcommand() === 'panel2') {
-              await handleTicketsPanel2(interaction);
             }
             break;
           case 'roleadd':
@@ -267,6 +275,20 @@ async function main() {
               } else {
                 await interaction.reply({
                   content: `❌ ${role} ya es un rol de staff.`,
+                  ephemeral: true
+                });
+              }
+            } else if (interaction.options.getSubcommand() === 'manager') {
+              const role = interaction.options.getRole('rol');
+              const added = addManagerRole(interaction.guild.id, role.id);
+              if (added) {
+                await interaction.reply({
+                  content: `✅ ${role} ha sido agregado como rol de manager para Soporte de Administración.`,
+                  ephemeral: true
+                });
+              } else {
+                await interaction.reply({
+                  content: `❌ ${role} ya es un rol de manager.`,
                   ephemeral: true
                 });
               }
@@ -451,6 +473,7 @@ async function handleSlashHelp(interaction) {
 **🎫 Sistema de Tickets:**
 \`/tickets panel\` — Publicar el panel de tickets *(solo admins)*
 \`/roleadd staff @rol\` — Agregar rol de staff *(solo admins)*
+\`/roleadd manager @rol\` — Dar acceso de manager al soporte de administración *(solo admins)*
 \`/transcript channel #canal\` — Canal de transcripciones *(solo admins)*
 
 **🛡️ Moderación:**
@@ -685,6 +708,7 @@ async function handleHelp(message) {
 **🎫 Sistema de Tickets:**
 \`/tickets panel\` — Panel de tickets *(solo admins)*
 \`/roleadd staff @rol\` — Agregar staff *(solo admins)*
+\`/roleadd manager @rol\` — Agregar managers para soporte de administración *(solo admins)*
 \`/transcript channel #canal\` — Canal de transcripciones *(solo admins)*
 
 **💬 Generales:**

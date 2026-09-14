@@ -20,7 +20,16 @@ function saveConfig(config) {
 
 function ensureGuild(config, guildId) {
   if (!config[guildId]) {
-    config[guildId] = { staffRoles: [], tickets: {}, ticketCounter: 0, transcriptChannel: null };
+    config[guildId] = {
+      staffRoles: [],
+      managerRoles: [],
+      tickets: {},
+      ticketCounter: 0,
+      transcriptChannel: null
+    };
+  }
+  if (!('managerRoles' in config[guildId])) {
+    config[guildId].managerRoles = [];
   }
   if (!('transcriptChannel' in config[guildId])) {
     config[guildId].transcriptChannel = null;
@@ -40,6 +49,17 @@ export function addStaffRole(guildId, roleId) {
   config = ensureGuild(config, guildId);
   if (!config[guildId].staffRoles.includes(roleId)) {
     config[guildId].staffRoles.push(roleId);
+    saveConfig(config);
+    return true;
+  }
+  return false;
+}
+
+export function addManagerRole(guildId, roleId) {
+  let config = loadConfig();
+  config = ensureGuild(config, guildId);
+  if (!config[guildId].managerRoles.includes(roleId)) {
+    config[guildId].managerRoles.push(roleId);
     saveConfig(config);
     return true;
   }

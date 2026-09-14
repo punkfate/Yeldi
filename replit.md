@@ -4,7 +4,7 @@
 A Discord bot that allows you to send messages to users and channels using both slash commands (/) and prefix commands (!). Includes a full ticket system with categories, modals, and transcripts.
 
 ## Recent Changes
-- **2026-05-16**: Ticket system redesigned with dropdown categories (Reportes, Dudas Generales, Postulaciones), modals with questions per category, and panel with ticket norms
+- Ticket system uses the Jester's Club identity, with Reportes, Dudas Generales, and Soporte de Administración categories
 - **2026-05-16**: Fixed all "interaction failed" errors — command registration now atomic, ticket button/claim/unclaim timing fixed
 - **2026-05-16**: Removed Express web server (src/web.js deleted), minimal port listener in index.js
 - **2026-04-05**: Added full ticket system with panel, staff roles, claim/unclaim/close buttons
@@ -16,6 +16,7 @@ A Discord bot that allows you to send messages to users and channels using both 
 ### Ticket System
 - `/tickets panel` - Post the ticket panel embed in the current channel (admin only)
 - `/roleadd staff @role` - Add a role as staff so they can see and manage tickets (admin only)
+- `/roleadd manager @role` - Add a role that can see and manage administration support tickets (admin only)
 - `/transcript channel #canal` - Set the channel where ticket transcripts are sent (admin only)
 
 #### Ticket Flow
@@ -23,7 +24,7 @@ A Discord bot that allows you to send messages to users and channels using both 
 2. A dropdown appears with 3 categories:
    - **🚨 Reportes** — Opens a modal asking for the reported user and reason
    - **❓ Dudas Generales** — Opens a modal asking for the ticket reason
-   - **📝 Postulaciones** — Creates the ticket directly (no questions)
+   - **🛠️ Soporte de Administración** — Private ticket visible to the opener, administrators, and managers
 3. Bot creates a private channel and sends an embed with the user's answers
 4. Staff can **Reclamar**, **Liberar**, or **Cerrar Ticket** using the buttons inside
 
@@ -71,5 +72,5 @@ package.json       - Node.js dependencies
 - Interaction router handles: buttons, string select menus, modal submits, slash commands, prefix commands
 - Ticket data (category, fields/answers, claim state) persisted to `data/ticketConfig.json`
 - Staff roles stored per guild
-- Channel names: `reporte-NNNN-user`, `duda-NNNN-user`, `postulacion-NNNN-user`; claimed → `reclamado-NNNN-user`
+- Channel names: `reporte-NNNN-user`, `duda-NNNN-user`, `soporte-admin-NNNN-user`; claimed → `reclamado-NNNN-user`
 - Minimal HTTP server on port 5000 (required by Replit to keep the process alive)
