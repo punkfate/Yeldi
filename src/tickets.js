@@ -253,7 +253,7 @@ async function openTicket(interaction, category, fields) {
   const permissionOverwrites = [
     { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
     {
-      id: member.user.id,
+      id: member.user,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
@@ -535,13 +535,34 @@ export async function handleCloseTicket(interaction) {
   deleteTicket(guild.id, channel.id);
 
   try {
-    const messages = await channel.messages.fetch({ limit: 100 });
-    const sorted = [...messages.values()].reverse();
+    const allMessages = [];
+    let before;
 
-    const transcriptLines = sorted.map(m => {
-      const time = new Date(m.createdTimestamp).toLocaleString('es-ES');
-      const content = m.content || (m.embeds.length ? '[Embed]' : '[Sin contenido]');
-      return `[${time}] ${m.author.tag}: ${content}`;
+    // Discord devuelve como máximo 100 mensajes por petición; recorremos
+    // todas las páginas para que el transcript no pierda mensajes antiguos.
+    while (true) {
+      const batch = await channel.messages.fetch({
+        limit: 100,
+        ...(before ? { before } : {})
+      });
+
+      if (!batch.size) break;
+      allMessages.push(...batch.values());
+      if (batch.size < 100) break;
+      before = batch.last().id;
+    }
+
+    const sorted = allMessages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+    const transcriptLines = sorted.map(message => {
+      const time = new Date(message.createdTimestamp).toLocaleString('es-ES');
+      const content =
+        message.content ||
+        (message.embeds.length ? '[Embed]' : '[Sin contenido]');
+      const attachments = message.attachments.size
+        ? ` [Adjuntos: ${[...message.attachments.values()].map(file => file.url).join(', ')}]`
+        : '';
+
+      return `[${time}] ${message.author.tag}: ${content}${attachments}`;
     });
 
     const transcriptChannelId = getTranscriptChannel(guild.id);
@@ -561,9 +582,48 @@ export async function handleCloseTicket(interaction) {
           .setColor(0x5865f2)
           .setTimestamp();
 
-        const transcriptText = transcriptLines.join('\n').slice(0, 1900);
-        await transcriptChannel.send({ embeds: [transcriptEmbed] });
-        await transcriptChannel.send({ content: `\`\`\`\n${transcriptText || 'Sin mensajes.'}\n\`\`\`` });
+        const transcriptChunks = [];
+        let currentChunk = '';
+
+        for (const line of (transcriptLines.length ? transcriptLines : ['Sin mensajes.'])) {
+          if (line.length > 1900) {
+            if (currentChunk) {
+              transcriptChunks.push(currentChunk);
+              currentChunk = '';
+            }
+            for (let index = 0; index < line.length; index += 1900) {
+              transcriptChunks.push(line.slice(index, index + 1900));
+            }
+          } else if (currentChunk && currentChunk.length + line.length + 1 > 1900) {
+            transcriptChunks.push(currentChunk);
+            currentChunk = line;
+          } else {
+            currentChunk = currentChunk ? `${currentChunk}\n${line}` : line;
+          }
+        }
+
+        if (currentChunk) transcriptChunks.push(currentChunk);
+
+        let firstTranscriptMessage;
+        for (const chunk of transcriptChunks) {
+          const transcriptMessage = await transcriptChannel.send({
+            content: `\`\`\`\n${chunk}\n\`\`\``
+          });
+          if (!firstTranscriptMessage) firstTranscriptMessage = transcriptMessage;
+        }
+
+        const transcriptButton = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setLabel('Ver todos los mensajes')
+            .setEmoji('📜')
+            .setStyle(ButtonStyle.Link)
+            .setURL(firstTranscriptMessage?.url || transcriptChannel.url)
+        );
+
+        await transcriptChannel.send({
+          embeds: [transcriptEmbed],
+          components: [transcriptButton]
+        });
       }
     }
   } catch (err) {

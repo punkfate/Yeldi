@@ -1,9 +1,14 @@
 {
   "1439778522393481287": {
-    "staffRoles": [],
+    "staffRoles": [
+      "1490322177357119750"
+    ],
     "tickets": {},
-    "ticketCounter": 11,
-    "transcriptChannel": "1443269008559444039"
+    "ticketCounter": 12,
+    "transcriptChannel": "1443269008559444039",
+    "managerRoles": [
+      "1490322177357119750"
+    ]
   },
   "1534919852463100016": {
     "staffRoles": [],
