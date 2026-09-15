@@ -131,11 +131,38 @@ function hasOpenTicket(interaction) {
 }
 
 export async function handleCategorySelect(interaction) {
-  const category = interaction.values[0];
+  const selectedCategory = interaction.values[0];
+  const categoryAliases = {
+    administration: 'admin_support',
+    admin: 'admin_support',
+    soporte_administracion: 'admin_support',
+    soporte_administrativo: 'admin_support'
+  };
+  const category = categoryAliases[selectedCategory] || selectedCategory;
+
+  // La creación del canal y la lectura/escritura de configuración pueden
+  // tardar más que la ventana de respuesta de Discord. Confirmamos primero
+  // la categoría administrativa para que la interacción no expire.
+  if (category === 'admin_support') {
+    await interaction.deferReply({ ephemeral: true });
+  }
 
   const openChannel = hasOpenTicket(interaction);
   if (openChannel) {
-    await interaction.reply({ content: `❌ Ya tienes un ticket abierto: ${openChannel}`, ephemeral: true });
+    const response = { content: `❌ Ya tienes un ticket abierto: ${openChannel}`, components: [] };
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(response);
+    } else {
+      await interaction.reply({ ...response, ephemeral: true });
+    }
+    return;
+  }
+
+  if (!['report', 'general', 'admin_support'].includes(category)) {
+    await interaction.reply({
+      content: '❌ Esta categoría pertenece a un panel antiguo. Pide a un administrador que publique de nuevo `/tickets panel`.',
+      ephemeral: true
+    });
     return;
   }
 
@@ -175,7 +202,6 @@ export async function handleCategorySelect(interaction) {
   }
 
   if (category === 'admin_support') {
-    await interaction.deferReply({ ephemeral: true });
     await openTicket(interaction, 'admin_support', {});
   }
 }
