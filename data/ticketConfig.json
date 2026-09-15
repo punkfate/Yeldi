@@ -22,5 +22,23 @@
     "tickets": {},
     "ticketCounter": 2,
     "transcriptChannel": "1529591464835944582"
+  },
+  "1542759235350306816": {
+    "staffRoles": [],
+    "managerRoles": [],
+    "tickets": {},
+    "ticketCounter": 2,
+    "transcriptChannel": "1542759235857944668"
+  },
+  "1498356012544036886": {
+    "staffRoles": [
+      "1511523860166479982"
+    ],
+    "managerRoles": [
+      "1511523853895995420"
+    ],
+    "tickets": {},
+    "ticketCounter": 0,
+    "transcriptChannel": "1511523978483597456"
   }
 }

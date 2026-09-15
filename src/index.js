@@ -75,7 +75,7 @@ const slashCommands = [
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addSubcommand(sub =>
       sub.setName('panel')
-        .setDescription('Publicar el panel de tickets en este canal')),
+        .setDescription('Publicar o actualizar el panel de tickets de Jester\'s Club')),
   new SlashCommandBuilder()
     .setName('roleadd')
     .setDescription('Gestionar permisos de roles')

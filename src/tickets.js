@@ -102,6 +102,18 @@ export async function handleTicketsPanel(interaction) {
 
   try {
     const channel = interaction.channel ?? await interaction.client.channels.fetch(interaction.channelId);
+
+    // Reemplaza únicamente los paneles de tickets publicados por este bot
+    // en el canal actual para que nunca queden categorías antiguas visibles.
+    const recentMessages = await channel.messages.fetch({ limit: 100 });
+    const oldPanels = recentMessages.filter(message =>
+      message.author.id === interaction.client.user.id &&
+      message.components.some(componentRow =>
+        componentRow.components?.some(component => component.customId === 'ticket_category')
+      )
+    );
+
+    await Promise.all([...oldPanels.values()].map(message => message.delete().catch(() => {})));
     await channel.send({ embeds: [embed], components: [row] });
     await interaction.editReply({ content: '✅ ¡Panel de tickets publicado!' });
   } catch (error) {
