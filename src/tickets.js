@@ -292,13 +292,11 @@ async function openTicket(interaction, category, fields) {
 
   const permissionOverwrites = [
     {
-      id: guild.roles.everyone.id,
-      type: OverwriteType.Role,
+      id: guild.roles.everyone,
       deny: [PermissionFlagsBits.ViewChannel]
     },
     {
-      id: member.user.id,
-      type: OverwriteType.Member,
+      id: interaction.user,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
@@ -315,8 +313,7 @@ async function openTicket(interaction, category, fields) {
 
   for (const role of visibleRoles) {
     permissionOverwrites.push({
-      id: role.id,
-      type: OverwriteType.Role,
+      id: role,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
