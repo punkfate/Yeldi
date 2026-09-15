@@ -2,6 +2,7 @@ import { createServer } from 'http';
 import { getDiscordClient } from './discord.js';
 import { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { addStaffRole, addManagerRole, setTranscriptChannel } from './ticketConfig.js';
+import { renderTranscriptHtml } from './transcripts.js';
 import {
   handleTicketsPanel,
   handleCategorySelect,
@@ -13,7 +14,31 @@ import {
   handleCloseTicket
 } from './tickets.js';
 
-createServer((_, res) => res.end('ok')).on('error', () => {}).listen(5000, '0.0.0.0');
+const transcriptServer = createServer((request, response) => {
+  const requestUrl = new URL(request.url || '/', 'http://localhost');
+  const match = requestUrl.pathname.match(/^\/transcripts\/([a-zA-Z0-9_-]+)$/);
+
+  if (match) {
+    const html = renderTranscriptHtml(match[1]);
+    if (html) {
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      response.end(html);
+      return;
+    }
+
+    response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    response.end('Transcript no encontrado');
+    return;
+  }
+
+  response.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+  response.end('Jester Bot activo');
+});
+
+transcriptServer.on('error', error => {
+  console.error('Error en el servidor de transcripts:', error.message);
+});
+transcriptServer.listen(5000, '0.0.0.0');
 
 const PREFIX = '!';
 

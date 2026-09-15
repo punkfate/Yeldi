@@ -15,5 +15,12 @@
     "tickets": {},
     "ticketCounter": 1,
     "transcriptChannel": null
+  },
+  "1529591464215056444": {
+    "staffRoles": [],
+    "managerRoles": [],
+    "tickets": {},
+    "ticketCounter": 2,
+    "transcriptChannel": "1529591464835944582"
   }
 }

@@ -23,6 +23,7 @@ import {
   nextTicketNumber,
   getTranscriptChannel
 } from './ticketConfig.js';
+import { getTranscriptUrl, saveTranscript } from './transcripts.js';
 
 const CATEGORY_LABELS = {
   report: '🚨 Reporte',
@@ -572,6 +573,30 @@ export async function handleCloseTicket(interaction) {
       return `[${time}] ${message.author.tag}: ${content}${attachments}`;
     });
 
+        const transcriptId = saveTranscript({
+          guildId: guild.id,
+          channelId: channel.id,
+          ticketNumber: ticket.ticketNumber,
+          categoryLabel: CATEGORY_LABELS[ticket.category] || '🎫 Ticket',
+          openerTag: `<@${ticket.userId}>`,
+          closedByTag: member.user.tag,
+          claimedByTag: ticket.claimedByTag || 'Nadie',
+          closedAt: new Date().toLocaleString('es-ES'),
+          messages: sorted.map(message => ({
+            authorTag: message.author.tag,
+            timestamp: new Date(message.createdTimestamp).toLocaleString('es-ES'),
+            content: message.content || (
+              message.embeds.length
+                ? message.embeds.map(embed =>
+                    [embed.title, embed.description].filter(Boolean).join(' — ')
+                  ).filter(Boolean).join('\n') || '[Embed]'
+                : '[Sin contenido]'
+            ),
+            avatarUrl: message.author.displayAvatarURL({ extension: 'png', size: 64 }),
+            attachments: [...message.attachments.values()].map(file => file.url)
+          }))
+        });
+
     const transcriptChannelId = getTranscriptChannel(guild.id);
     if (transcriptChannelId) {
       const transcriptChannel = guild.channels.cache.get(transcriptChannelId);
@@ -621,10 +646,14 @@ export async function handleCloseTicket(interaction) {
 
         const transcriptButton = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
-            .setLabel('Ver todos los mensajes')
+            .setLabel('Abrir transcript web')
             .setEmoji('📜')
             .setStyle(ButtonStyle.Link)
-            .setURL(firstTranscriptMessage?.url || transcriptChannel.url)
+            .setURL(
+              getTranscriptUrl(transcriptId) ||
+              firstTranscriptMessage?.url ||
+              transcriptChannel.url
+            )
         );
 
         await transcriptChannel.send({
