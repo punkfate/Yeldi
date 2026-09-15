@@ -10,6 +10,8 @@ import {
   TextInputBuilder,
   TextInputStyle,
   PermissionFlagsBits,
+  PermissionsBitField,
+  PermissionOverwrites,
   ChannelType,
   OverwriteType
 } from 'discord.js';
@@ -279,6 +281,15 @@ function canManageTicket(member, guildConfig, ticket) {
   return guildConfig.staffRoles.some(roleId => member.roles.cache.has(roleId));
 }
 
+function buildPermissionOverwrite(client, id, type, { allow = [], deny = [] } = {}) {
+  return new PermissionOverwrites(client, {
+    id: typeof id === 'string' ? id : id.id,
+    type,
+    allow: PermissionsBitField.resolve(allow).toString(),
+    deny: PermissionsBitField.resolve(deny).toString()
+  });
+}
+
 async function openTicket(interaction, category, fields) {
   const guild = interaction.guild;
   const member = interaction.member;
@@ -291,18 +302,16 @@ async function openTicket(interaction, category, fields) {
   const channelName = `${prefix}-${ticketNumber.toString().padStart(4, '0')}-${safeName}`;
 
   const permissionOverwrites = [
-    {
-      id: guild.roles.everyone,
+    buildPermissionOverwrite(interaction.client, guild.roles.everyone, OverwriteType.Role, {
       deny: [PermissionFlagsBits.ViewChannel]
-    },
-    {
-      id: interaction.user,
+    }),
+    buildPermissionOverwrite(interaction.client, interaction.user, OverwriteType.Member, {
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
         PermissionFlagsBits.ReadMessageHistory
       ]
-    }
+    })
   ];
 
   const visibleRoles = category === 'admin_support'
@@ -312,15 +321,19 @@ async function openTicket(interaction, category, fields) {
         .filter(Boolean);
 
   for (const role of visibleRoles) {
-    permissionOverwrites.push({
-      id: role,
-      allow: [
+    permissionOverwrites.push(buildPermissionOverwrite(
+      interaction.client,
+      role,
+      OverwriteType.Role,
+      {
+        allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
         PermissionFlagsBits.ReadMessageHistory,
         PermissionFlagsBits.ManageMessages
-      ]
-    });
+        ]
+      }
+    ));
   }
 
   try {
