@@ -10,7 +10,8 @@ import {
   TextInputBuilder,
   TextInputStyle,
   PermissionFlagsBits,
-  ChannelType
+  ChannelType,
+  OverwriteType
 } from 'discord.js';
 import {
   getGuildConfig,
@@ -251,9 +252,14 @@ async function openTicket(interaction, category, fields) {
   const channelName = `${prefix}-${ticketNumber.toString().padStart(4, '0')}-${safeName}`;
 
   const permissionOverwrites = [
-    { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
     {
-      id: member.user,
+      id: guild.roles.everyone.id,
+      type: OverwriteType.Role,
+      deny: [PermissionFlagsBits.ViewChannel]
+    },
+    {
+      id: member.user.id,
+      type: OverwriteType.Member,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
@@ -271,6 +277,7 @@ async function openTicket(interaction, category, fields) {
   for (const role of visibleRoles) {
     permissionOverwrites.push({
       id: role.id,
+      type: OverwriteType.Role,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
