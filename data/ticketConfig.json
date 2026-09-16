@@ -39,6 +39,9 @@
     ],
     "tickets": {},
     "ticketCounter": 0,
-    "transcriptChannel": "1511523978483597456"
+    "transcriptChannel": "1511523978483597456",
+    "twitchModRoles": [
+      "1511523857863938111"
+    ]
   }
 }
