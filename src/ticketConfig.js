@@ -23,6 +23,7 @@ function ensureGuild(config, guildId) {
     config[guildId] = {
       staffRoles: [],
       managerRoles: [],
+      twitchModRoles: [],
       tickets: {},
       ticketCounter: 0,
       transcriptChannel: null
@@ -30,6 +31,9 @@ function ensureGuild(config, guildId) {
   }
   if (!('managerRoles' in config[guildId])) {
     config[guildId].managerRoles = [];
+  }
+  if (!('twitchModRoles' in config[guildId])) {
+    config[guildId].twitchModRoles = [];
   }
   if (!('transcriptChannel' in config[guildId])) {
     config[guildId].transcriptChannel = null;
@@ -60,6 +64,17 @@ export function addManagerRole(guildId, roleId) {
   config = ensureGuild(config, guildId);
   if (!config[guildId].managerRoles.includes(roleId)) {
     config[guildId].managerRoles.push(roleId);
+    saveConfig(config);
+    return true;
+  }
+  return false;
+}
+
+export function addTwitchModRole(guildId, roleId) {
+  let config = loadConfig();
+  config = ensureGuild(config, guildId);
+  if (!config[guildId].twitchModRoles.includes(roleId)) {
+    config[guildId].twitchModRoles.push(roleId);
     saveConfig(config);
     return true;
   }

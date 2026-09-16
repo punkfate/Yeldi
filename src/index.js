@@ -1,7 +1,12 @@
 import { createServer } from 'http';
 import { getDiscordClient } from './discord.js';
 import { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
-import { addStaffRole, addManagerRole, setTranscriptChannel } from './ticketConfig.js';
+import {
+  addStaffRole,
+  addManagerRole,
+  addTwitchModRole,
+  setTranscriptChannel
+} from './ticketConfig.js';
 import { renderTranscriptHtml } from './transcripts.js';
 import {
   handleTicketsPanel,
@@ -93,6 +98,13 @@ const slashCommands = [
         .addRoleOption(option =>
           option.setName('rol')
             .setDescription('El rol cuyos miembros podrán ver soporte de administración')
+            .setRequired(true)))
+    .addSubcommand(sub =>
+      sub.setName('twitch')
+        .setDescription('Agregar un rol de moderador para soporte de Twitch')
+        .addRoleOption(option =>
+          option.setName('rol')
+            .setDescription('El rol cuyos miembros podrán ver soporte de Twitch')
             .setRequired(true))),
   new SlashCommandBuilder()
     .setName('transcript')
@@ -220,6 +232,7 @@ async function main() {
       console.log('  /tickets panel');
       console.log('  /roleadd staff @rol');
       console.log('  /roleadd manager @rol');
+      console.log('  /roleadd twitch @rol');
       console.log('  /transcript channel #canal');
     });
 
@@ -314,6 +327,20 @@ async function main() {
               } else {
                 await interaction.reply({
                   content: `❌ ${role} ya es un rol de manager.`,
+                  ephemeral: true
+                });
+              }
+            } else if (interaction.options.getSubcommand() === 'twitch') {
+              const role = interaction.options.getRole('rol');
+              const added = addTwitchModRole(interaction.guild.id, role.id);
+              if (added) {
+                await interaction.reply({
+                  content: `✅ ${role} ha sido agregado como rol de moderador para Soporte de Twitch.`,
+                  ephemeral: true
+                });
+              } else {
+                await interaction.reply({
+                  content: `❌ ${role} ya es un rol de moderador de Twitch.`,
                   ephemeral: true
                 });
               }
@@ -446,6 +473,14 @@ async function main() {
 }
 
 async function handleSlashSay(interaction) {
+  if (!isAdmin(interaction.member)) {
+    await interaction.reply({
+      content: '❌ Solo los administradores pueden usar `/say`.',
+      ephemeral: true
+    });
+    return;
+  }
+
   const targetChannel = interaction.options.getChannel('canal');
   const mensaje = interaction.options.getString('mensaje');
 
@@ -499,6 +534,7 @@ async function handleSlashHelp(interaction) {
 \`/tickets panel\` — Publicar el panel de tickets *(solo admins)*
 \`/roleadd staff @rol\` — Agregar rol de staff *(solo admins)*
 \`/roleadd manager @rol\` — Dar acceso de manager al soporte de administración *(solo admins)*
+\`/roleadd twitch @rol\` — Dar acceso al soporte de Twitch *(solo admins)*
 \`/transcript channel #canal\` — Canal de transcripciones *(solo admins)*
 
 **🛡️ Moderación:**
@@ -734,6 +770,7 @@ async function handleHelp(message) {
 \`/tickets panel\` — Panel de tickets *(solo admins)*
 \`/roleadd staff @rol\` — Agregar staff *(solo admins)*
 \`/roleadd manager @rol\` — Agregar managers para soporte de administración *(solo admins)*
+\`/roleadd twitch @rol\` — Agregar moderadores para soporte de Twitch *(solo admins)*
 \`/transcript channel #canal\` — Canal de transcripciones *(solo admins)*
 
 **💬 Generales:**

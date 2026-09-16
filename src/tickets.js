@@ -30,13 +30,15 @@ import { getTranscriptUrl, saveTranscript } from './transcripts.js';
 const CATEGORY_LABELS = {
   report: '🚨 Reporte',
   general: '❓ Duda General',
-  admin_support: '🛠️ Soporte de Administración'
+  admin_support: '🛠️ Soporte de Administración',
+  twitch_support: '🎥 Soporte de Twitch'
 };
 
 const CATEGORY_COLORS = {
   report: 0xed4245,
   general: 0x5865f2,
-  admin_support: 0x9b59b6
+  admin_support: 0x9b59b6,
+  twitch_support: 0x9146ff
 };
 
 const TICKET_PANEL_CUSTOM_ID = 'jester_ticket_category_v2';
@@ -67,6 +69,11 @@ export async function handleTicketsPanel(interaction) {
       {
         name: '🛠️ Soporte de Administración',
         value: 'Para asuntos que necesitan la atención de administradores o managers. Estos tickets son privados y solo los verá el usuario que lo abre, los administradores y los managers.',
+        inline: false
+      },
+      {
+        name: '🎥 Soporte de Twitch',
+        value: 'Para problemas relacionados con Twitch, directos, clips, canales o moderación. Estos tickets son privados y solo los verá el usuario que lo abre, los administradores y los moderadores de Twitch configurados.',
         inline: false
       },
       {
@@ -103,7 +110,12 @@ export async function handleTicketsPanel(interaction) {
         .setLabel('Soporte de Administración')
         .setDescription('Contacta con los administradores o managers de Jester\'s Club')
         .setEmoji('🛠️')
-        .setValue('admin_support')
+        .setValue('admin_support'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Soporte de Twitch')
+        .setDescription('Contacta con los moderadores de Twitch de Jester\'s Club')
+        .setEmoji('🎥')
+        .setValue('twitch_support')
     );
 
   const row = new ActionRowBuilder().addComponents(select);
@@ -146,14 +158,16 @@ export async function handleCategorySelect(interaction) {
     administration: 'admin_support',
     admin: 'admin_support',
     soporte_administracion: 'admin_support',
-    soporte_administrativo: 'admin_support'
+    soporte_administrativo: 'admin_support',
+    twitch: 'twitch_support',
+    soporte_twitch: 'twitch_support'
   };
   const category = categoryAliases[selectedCategory] || selectedCategory;
 
   // La creación del canal y la lectura/escritura de configuración pueden
   // tardar más que la ventana de respuesta de Discord. Confirmamos primero
   // la categoría administrativa para que la interacción no expire.
-  if (category === 'admin_support') {
+  if (category === 'admin_support' || category === 'twitch_support') {
     await interaction.deferReply({ ephemeral: true });
   }
 
@@ -168,7 +182,7 @@ export async function handleCategorySelect(interaction) {
     return;
   }
 
-  if (!['report', 'general', 'admin_support'].includes(category)) {
+  if (!['report', 'general', 'admin_support', 'twitch_support'].includes(category)) {
     await interaction.reply({
       content: '❌ Esta categoría pertenece a un panel antiguo. Pide a un administrador que publique de nuevo `/tickets panel`.',
       ephemeral: true
@@ -213,6 +227,11 @@ export async function handleCategorySelect(interaction) {
 
   if (category === 'admin_support') {
     await openTicket(interaction, 'admin_support', {});
+    return;
+  }
+
+  if (category === 'twitch_support') {
+    await openTicket(interaction, 'twitch_support', {});
   }
 }
 
@@ -271,8 +290,8 @@ export async function handleModalGeneral(interaction) {
   await openTicket(interaction, 'general', { generalReason });
 }
 
-function getManagerRoles(guild, guildConfig) {
-  const configuredRoleIds = new Set(guildConfig.managerRoles || []);
+function getConfiguredRoles(guild, roleIds) {
+  const configuredRoleIds = new Set(roleIds || []);
   return guild.roles.cache.filter(role => configuredRoleIds.has(role.id));
 }
 
@@ -280,7 +299,13 @@ function canManageTicket(member, guildConfig, ticket) {
   if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
 
   if (ticket.category === 'admin_support') {
-    return getManagerRoles(member.guild, guildConfig).some(role => member.roles.cache.has(role.id));
+    return getConfiguredRoles(member.guild, guildConfig.managerRoles)
+      .some(role => member.roles.cache.has(role.id));
+  }
+
+  if (ticket.category === 'twitch_support') {
+    return getConfiguredRoles(member.guild, guildConfig.twitchModRoles)
+      .some(role => member.roles.cache.has(role.id));
   }
 
   return guildConfig.staffRoles.some(roleId => member.roles.cache.has(roleId));
@@ -301,7 +326,12 @@ async function openTicket(interaction, category, fields) {
   const guildConfig = getGuildConfig(guild.id);
   const ticketNumber = nextTicketNumber(guild.id);
 
-  const prefixes = { report: 'reporte', general: 'duda', admin_support: 'soporte-admin' };
+  const prefixes = {
+    report: 'reporte',
+    general: 'duda',
+    admin_support: 'soporte-admin',
+    twitch_support: 'soporte-twitch'
+  };
   const prefix = prefixes[category] || 'ticket';
   const safeName = member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20) || 'usuario';
   const channelName = `${prefix}-${ticketNumber.toString().padStart(4, '0')}-${safeName}`;
@@ -320,10 +350,10 @@ async function openTicket(interaction, category, fields) {
   ];
 
   const visibleRoles = category === 'admin_support'
-    ? getManagerRoles(guild, guildConfig)
-    : guildConfig.staffRoles
-        .map(roleId => guild.roles.cache.get(roleId))
-        .filter(Boolean);
+    ? getConfiguredRoles(guild, guildConfig.managerRoles)
+    : category === 'twitch_support'
+      ? getConfiguredRoles(guild, guildConfig.twitchModRoles)
+      : getConfiguredRoles(guild, guildConfig.staffRoles);
 
   for (const role of visibleRoles) {
     permissionOverwrites.push(buildPermissionOverwrite(
@@ -399,7 +429,8 @@ function buildNewTicketEmbed(ticketNumber, category, member, fields) {
   const descriptions = {
     report: `¡Hola ${member}! Tu reporte ha sido recibido.\nEl staff lo revisará lo antes posible.`,
     general: `¡Hola ${member}! Tu ticket ha sido creado.\nDescribe tu situación y el staff te atenderá pronto.`,
-    admin_support: `¡Hola ${member}! Este canal es para asuntos que requieren la atención de los administradores o managers de Jester's Club.`
+    admin_support: `¡Hola ${member}! Este canal es para asuntos que requieren la atención de los administradores o managers de Jester's Club.`,
+    twitch_support: `¡Hola ${member}! Este canal es para asuntos relacionados con Twitch y su moderación.`
   };
 
   const embed = new EmbedBuilder()
@@ -435,6 +466,13 @@ function buildNewTicketEmbed(ticketNumber, category, member, fields) {
     );
   }
 
+  if (category === 'twitch_support') {
+    embed.addFields(
+      { name: '\u200b', value: '**— Soporte de Twitch —**', inline: false },
+      { name: '🔐 Acceso', value: 'Solo administradores y moderadores de Twitch configurados pueden ver y gestionar este ticket.', inline: false }
+    );
+  }
+
   return embed;
 }
 
@@ -447,7 +485,8 @@ function buildTicketEmbed(ticket, ticketNumber, openerId, claimedMention) {
   const descriptions = {
     report: `Tu reporte ha sido recibido.\nEl staff lo revisará lo antes posible.`,
     general: `Tu ticket ha sido creado.\nEl staff te atenderá pronto.`,
-    admin_support: `Este ticket es para asuntos que requieren la atención de los administradores o managers de Jester's Club.`
+    admin_support: `Este ticket es para asuntos que requieren la atención de los administradores o managers de Jester's Club.`,
+    twitch_support: `Este ticket es para asuntos relacionados con Twitch y su moderación.`
   };
 
   const embed = new EmbedBuilder()
@@ -480,6 +519,13 @@ function buildTicketEmbed(ticket, ticketNumber, openerId, claimedMention) {
     embed.addFields(
       { name: '\u200b', value: '**— Soporte de Administración —**', inline: false },
       { name: '🔐 Acceso', value: 'Solo administradores y managers pueden ver y gestionar este ticket.', inline: false }
+    );
+  }
+
+  if (ticket.category === 'twitch_support') {
+    embed.addFields(
+      { name: '\u200b', value: '**— Soporte de Twitch —**', inline: false },
+      { name: '🔐 Acceso', value: 'Solo administradores y moderadores de Twitch configurados pueden ver y gestionar este ticket.', inline: false }
     );
   }
 
