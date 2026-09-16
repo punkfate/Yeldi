@@ -193,13 +193,24 @@ function isAdmin(member) {
 
 async function registerSlashCommands(client) {
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+  const commandBody = slashCommands.map(cmd => cmd.toJSON());
 
   try {
-    console.log('Registrando comandos slash...');
+    console.log('Limpiando comandos slash antiguos...');
     await rest.put(
       Routes.applicationCommands(client.user.id),
-      { body: slashCommands.map(cmd => cmd.toJSON()) }
+      { body: [] }
     );
+
+    console.log('Registrando comandos slash actualizados por servidor...');
+    for (const guild of client.guilds.cache.values()) {
+      await rest.put(
+        Routes.applicationGuildCommands(client.user.id, guild.id),
+        { body: commandBody }
+      );
+      console.log(`Comandos actualizados en ${guild.name} (${guild.id})`);
+    }
+
     console.log('¡Comandos slash registrados correctamente!');
   } catch (error) {
     console.error('Error al registrar los comandos slash:', error);

@@ -355,7 +355,7 @@ async function openTicket(interaction, category, fields) {
       ? getConfiguredRoles(guild, guildConfig.twitchModRoles)
       : getConfiguredRoles(guild, guildConfig.staffRoles);
 
-  for (const role of visibleRoles) {
+  for (const role of visibleRoles.values()) {
     permissionOverwrites.push(buildPermissionOverwrite(
       interaction.client,
       role,
