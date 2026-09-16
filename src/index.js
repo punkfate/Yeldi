@@ -241,7 +241,7 @@ async function main() {
         }
 
         if (interaction.isStringSelectMenu()) {
-          if (interaction.customId === 'ticket_category') {
+          if (['ticket_category', 'jester_ticket_category_v2'].includes(interaction.customId)) {
             await handleCategorySelect(interaction);
           } else if (interaction.customId === 'report_user_select') {
             await handleReportUserSelect(interaction);

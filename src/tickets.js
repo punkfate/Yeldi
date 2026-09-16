@@ -39,6 +39,12 @@ const CATEGORY_COLORS = {
   admin_support: 0x9b59b6
 };
 
+const TICKET_PANEL_CUSTOM_ID = 'jester_ticket_category_v2';
+const LEGACY_TICKET_PANEL_CUSTOM_IDS = new Set([
+  'ticket_category',
+  'jester_ticket_category_v2'
+]);
+
 export async function handleTicketsPanel(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
@@ -80,7 +86,7 @@ export async function handleTicketsPanel(interaction) {
     .setTimestamp();
 
   const select = new StringSelectMenuBuilder()
-    .setCustomId('ticket_category')
+    .setCustomId(TICKET_PANEL_CUSTOM_ID)
     .setPlaceholder('📂 Selecciona una categoría...')
     .addOptions(
       new StringSelectMenuOptionBuilder()
@@ -111,7 +117,9 @@ export async function handleTicketsPanel(interaction) {
     const oldPanels = recentMessages.filter(message =>
       message.author.id === interaction.client.user.id &&
       message.components.some(componentRow =>
-        componentRow.components?.some(component => component.customId === 'ticket_category')
+        componentRow.components?.some(component =>
+          LEGACY_TICKET_PANEL_CUSTOM_IDS.has(component.customId)
+        )
       )
     );
 
@@ -265,10 +273,7 @@ export async function handleModalGeneral(interaction) {
 
 function getManagerRoles(guild, guildConfig) {
   const configuredRoleIds = new Set(guildConfig.managerRoles || []);
-  return guild.roles.cache.filter(role =>
-    configuredRoleIds.has(role.id) ||
-    ['manager', 'managers'].includes(role.name.trim().toLowerCase())
-  );
+  return guild.roles.cache.filter(role => configuredRoleIds.has(role.id));
 }
 
 function canManageTicket(member, guildConfig, ticket) {
