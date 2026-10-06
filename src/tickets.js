@@ -152,29 +152,24 @@ function isLikelyTicketPanelChannel(channel) {
 async function findTicketPanelsInGuild(
   guild,
   botId,
-  { fullHistory = false, candidateChannelsOnly = false } = {}
+  { candidateChannelsOnly = false, includeChannelIds = [] } = {}
 ) {
   const panels = [];
+  const includedChannelIds = new Set(includeChannelIds.map(String));
 
   for (const channel of guild.channels.cache.values()) {
     if (!channel.isTextBased() || !channel.messages) continue;
-    if (candidateChannelsOnly && !isLikelyTicketPanelChannel(channel)) continue;
+    if (
+      candidateChannelsOnly &&
+      !isLikelyTicketPanelChannel(channel) &&
+      !includedChannelIds.has(String(channel.id))
+    ) continue;
 
-    let before;
     try {
-      while (true) {
-        const messages = await channel.messages.fetch({
-          limit: 100,
-          ...(before ? { before } : {})
-        });
-        if (!messages.size) break;
-
-        panels.push(
-          ...messages.filter(message => isTicketPanelMessage(message, botId)).values()
-        );
-        if (!fullHistory || messages.size < 100) break;
-        before = messages.last().id;
-      }
+      const messages = await channel.messages.fetch({ limit: 100 });
+      panels.push(
+        ...messages.filter(message => isTicketPanelMessage(message, botId)).values()
+      );
     } catch (error) {
       console.warn(
         `No se pudo revisar #${channel.name} (${channel.id}): ${error.message}`
@@ -185,11 +180,36 @@ async function findTicketPanelsInGuild(
   return panels.sort((a, b) => b.createdTimestamp - a.createdTimestamp);
 }
 
-async function deleteTicketPanelsInGuild(guild, botId) {
-  const panels = await findTicketPanelsInGuild(guild, botId, { fullHistory: true });
-  const results = await Promise.allSettled(panels.map(message => message.delete()));
+async function cleanupRecentTicketPanelsInGuild(
+  guild,
+  botId,
+  { keepMessageId, previousPanel, currentChannelId }
+) {
+  const includeChannelIds = [currentChannelId, previousPanel?.channelId].filter(Boolean);
+  const panels = await findTicketPanelsInGuild(guild, botId, {
+    candidateChannelsOnly: true,
+    includeChannelIds
+  });
+
+  if (previousPanel) {
+    try {
+      const oldChannel = await guild.channels.fetch(previousPanel.channelId);
+      const oldMessage = oldChannel?.isTextBased()
+        ? await oldChannel.messages.fetch(previousPanel.messageId)
+        : null;
+      if (oldMessage && isTicketPanelMessage(oldMessage, botId)) {
+        panels.push(oldMessage);
+      }
+    } catch (error) {
+      console.warn(`No se pudo recuperar el panel anterior: ${error.message}`);
+    }
+  }
+
+  const uniquePanels = [...new Map(panels.map(message => [message.id, message])).values()]
+    .filter(message => String(message.id) !== String(keepMessageId));
+  const results = await Promise.allSettled(uniquePanels.map(message => message.delete()));
   return {
-    found: panels.length,
+    found: uniquePanels.length,
     deleted: results.filter(result => result.status === 'fulfilled').length,
     failed: results.filter(result => result.status === 'rejected').length
   };
@@ -216,7 +236,6 @@ export async function reconcileTicketPanels(client) {
     }
 
     const panels = await findTicketPanelsInGuild(guild, client.user.id, {
-      fullHistory: true,
       candidateChannelsOnly: true
     });
     console.log(
@@ -323,18 +342,27 @@ export async function handleTicketsPanel(interaction) {
       throw new Error('El canal no admite mensajes.');
     }
 
-    const cleanup = await deleteTicketPanelsInGuild(
-      interaction.guild,
-      interaction.client.user.id
-    );
+    const previousPanel = getTicketPanel(interaction.guild.id);
     const panelMessage = await channel.send(buildTicketPanelPayload());
     setTicketPanel(interaction.guild.id, channel.id, panelMessage.id);
-
-    const failureNote = cleanup.failed
-      ? ` No se pudieron borrar ${cleanup.failed}; revisa el permiso Gestionar mensajes en esos canales.`
-      : '';
     await interaction.editReply({
-      content: `✅ Panel actualizado. Se eliminaron ${cleanup.deleted} paneles anteriores; queda solo el nuevo.${failureNote}`
+      content: '✅ Panel publicado. La limpieza de paneles recientes anteriores se hará en segundo plano.'
+    });
+
+    cleanupRecentTicketPanelsInGuild(
+      interaction.guild,
+      interaction.client.user.id,
+      {
+        keepMessageId: panelMessage.id,
+        previousPanel,
+        currentChannelId: channel.id
+      }
+    ).then(cleanup => {
+      console.log(
+        `Limpieza de paneles en ${interaction.guild.name}: ${cleanup.deleted}/${cleanup.found} eliminados; ${cleanup.failed} fallidos.`
+      );
+    }).catch(error => {
+      console.error('Error al limpiar paneles antiguos:', error);
     });
   } catch (error) {
     console.error('Error al reemplazar el panel de tickets:', error);

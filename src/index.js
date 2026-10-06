@@ -792,10 +792,14 @@ async function main() {
         message.content
           .slice(PREFIX.length)
           .trim()
-          .split(/ +/);
+          .match(/"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|\S+/g)
+          ?.map(value => value.replace(/^(['"])([\s\S]*)\1$/, '$2'))
+        || [];
 
       const command =
-        args.shift().toLowerCase();
+        (args.shift() || '').toLowerCase();
+
+      if (!command) return;
 
 
       if (command === 'ping') {
@@ -1062,47 +1066,46 @@ async function handleSlashUnlock(interaction) {
 }
 
 
+async function buildHelpEmbed() {
+  const { EmbedBuilder } = await import('discord.js');
+  return new EmbedBuilder()
+    .setTitle('🤖 Comandos del Bot')
+    .setColor(0x5865f2)
+    .addFields(
+      {
+        name: '🎫 Sistema de Tickets',
+        value: [
+          '`/tickets panel` — Publicar el panel (administradores)',
+          '`/roleadd staff @rol`, `/roleadd manager @rol`, `/roleadd twitch @rol`',
+          '`/transcript channel #canal` — Elegir canal de transcripciones'
+        ].join('\n')
+      },
+      {
+        name: '🛡️ Moderación',
+        value: '`/kick`, `/ban`, `/unban`, `/mute`, `/unmute`, `/clear`'
+      },
+      {
+        name: '💬 Generales',
+        value: '`/hola`, `/info`, `/ping`, `/say`, `/lock`, `/unlock`, `/help`'
+      },
+      {
+        name: '⌨️ Comandos con prefijo !',
+        value: [
+          '`!hola`, `!info`, `!ping`, `!say`, `!lock`, `!unlock`, `!clear`',
+          '`!kick`, `!ban`, `!unban`, `!mute`, `!unmute`, `!help`',
+          'En `!kick`, `!ban`, `!mute` y `!unmute` puedes usar nombre exacto o ID; pon entre comillas los nombres con espacios. `!unban` usa un ID.'
+        ].join('\n')
+      }
+    )
+    .setFooter({ text: 'Los comandos de moderación requieren permisos de administrador.' });
+}
+
+
 async function handleSlashHelp(interaction) {
-
-  const helpMessage = `
-**🤖 Comandos del Bot**
-
-**🎫 Sistema de Tickets:**
-\`/tickets panel\` — Publicar el panel de tickets *(solo admins)*
-\`/roleadd staff @rol\` — Agregar rol de staff *(solo admins)*
-\`/roleadd manager @rol\` — Dar acceso de manager *(solo admins)*
-\`/roleadd twitch @rol\` — Agregar moderador Twitch *(solo admins)*
-\`/transcript channel #canal\` — Canal de transcripciones *(solo admins)*
-
-**🛡️ Moderación:**
-\`/kick @user [razón]\`
-\`/ban @user [razón]\`
-\`/unban <ID>\`
-\`/mute @user [razón]\`
-\`/unmute @user\`
-\`/clear [n]\`
-
-**💬 Generales:**
-\`/hola\`
-\`/info\`
-\`/ping\`
-\`/say #canal <mensaje>\`
-\`/lock\`
-\`/unlock\`
-\`/help\`
-
-**Prefijo \`!\`:**
-\`!hola\` • \`!info\` • \`!ping\`
-\`!kick\` • \`!ban\` • \`!unban\`
-\`!mute\` • \`!unmute\` • \`!clear\`
-\`!say\` • \`!lock\` • \`!unlock\` • \`!help\`
-`;
-
   await interaction.reply({
-    content: helpMessage,
+    embeds: [await buildHelpEmbed()],
     ephemeral: true
   });
-
 }
 
 
@@ -1403,23 +1406,83 @@ async function handleClearMsg(message, args) {
 }
 
 
-async function handleKickMsg(message, args) {
-
-  const miembro =
-    message.mentions.members.first();
-
-  if (!miembro) {
-
-    await message.reply(
-      'Menciona a un miembro. Uso: `!kick @usuario [razón]`'
-    );
-
-    return;
+async function resolvePrefixMember(message, value) {
+  if (!message.guild || !value) {
+    return { member: null, matches: [] };
   }
 
-  const razon =
-    args.slice(1).join(' ')
-    || 'Sin razón especificada';
+  const input = String(value).trim();
+  const mentionId = input.match(/^<@!?(\d+)>$/)?.[1];
+  const userId = mentionId || (/^\d+$/.test(input) ? input : null);
+
+  if (userId) {
+    const member =
+      message.guild.members.cache.get(userId)
+      || await message.guild.members.fetch(userId).catch(() => null);
+    return { member: member || null, matches: [] };
+  }
+
+  const query = input.replace(/^@/, '').trim().toLocaleLowerCase();
+  const isExactMatch = member => [
+    member.user.username,
+    member.displayName,
+    member.user.globalName,
+    member.user.tag
+  ].some(name => name?.toLocaleLowerCase() === query);
+
+  let matches = [...message.guild.members.cache.values()].filter(isExactMatch);
+
+  if (!matches.length && typeof message.guild.members.search === 'function') {
+    try {
+      const searchResults = await message.guild.members.search({
+        query: input.replace(/^@/, '').trim(),
+        limit: 25
+      });
+      matches = [...searchResults.values()].filter(isExactMatch);
+    } catch (error) {
+      console.warn('No se pudo buscar al miembro por nombre:', error.message);
+    }
+  }
+
+  const uniqueMatches = [...new Map(matches.map(member => [member.id, member])).values()];
+  return {
+    member: uniqueMatches.length === 1 ? uniqueMatches[0] : null,
+    matches: uniqueMatches
+  };
+}
+
+async function getPrefixModerationTarget(message, args, command) {
+  const result = await resolvePrefixMember(message, args[0]);
+  if (result.member) {
+    return {
+      member: result.member,
+      reason: args.slice(1).join(' ') || 'Sin razón especificada'
+    };
+  }
+
+  if (result.matches.length > 1) {
+    const choices = result.matches
+      .slice(0, 5)
+      .map(member => `${member.user.tag} (${member.id})`)
+      .join(', ');
+    await message.reply(
+      `Encontré varios miembros con ese nombre. Usa su ID o una mención: ${choices}`
+    );
+    return null;
+  }
+
+  await message.reply(
+    `No encontré ese miembro. Uso: \`!${command} usuario|ID|@mención ["razón"]\``
+  );
+  return null;
+}
+
+
+async function handleKickMsg(message, args) {
+
+  const target = await getPrefixModerationTarget(message, args, 'kick');
+  if (!target) return;
+  const { member: miembro, reason: razon } = target;
 
   await miembro.kick(razon);
 
@@ -1432,21 +1495,9 @@ async function handleKickMsg(message, args) {
 
 async function handleBanMsg(message, args) {
 
-  const miembro =
-    message.mentions.members.first();
-
-  if (!miembro) {
-
-    await message.reply(
-      'Menciona a un miembro. Uso: `!ban @usuario [razón]`'
-    );
-
-    return;
-  }
-
-  const razon =
-    args.slice(1).join(' ')
-    || 'Sin razón especificada';
+  const target = await getPrefixModerationTarget(message, args, 'ban');
+  if (!target) return;
+  const { member: miembro, reason: razon } = target;
 
   await miembro.ban({
     reason: razon
@@ -1494,21 +1545,9 @@ async function handleUnbanMsg(message, args) {
 
 async function handleMuteMsg(message, args) {
 
-  const miembro =
-    message.mentions.members.first();
-
-  if (!miembro) {
-
-    await message.reply(
-      'Menciona a un miembro. Uso: `!mute @usuario [razón]`'
-    );
-
-    return;
-  }
-
-  const razon =
-    args.slice(1).join(' ')
-    || 'Sin razón especificada';
+  const target = await getPrefixModerationTarget(message, args, 'mute');
+  if (!target) return;
+  const { member: miembro, reason: razon } = target;
 
   let role =
     message.guild.roles.cache.find(
@@ -1556,17 +1595,9 @@ async function handleMuteMsg(message, args) {
 
 async function handleUnmuteMsg(message, args) {
 
-  const miembro =
-    message.mentions.members.first();
-
-  if (!miembro) {
-
-    await message.reply(
-      'Menciona a un miembro. Uso: `!unmute @usuario`'
-    );
-
-    return;
-  }
+  const target = await getPrefixModerationTarget(message, args, 'unmute');
+  if (!target) return;
+  const miembro = target.member;
 
   const role =
     message.guild.roles.cache.find(
@@ -1726,27 +1757,7 @@ async function handleUnlock(message) {
 
 
 async function handleHelp(message) {
-
-  const helpMessage = `
-**🤖 Comandos del Bot**
-
-**🎫 Sistema de Tickets:**
-\`/tickets panel\` — Panel de tickets *(solo admins)*
-\`/roleadd staff @rol\` — Agregar staff *(solo admins)*
-\`/roleadd manager @rol\` — Agregar managers *(solo admins)*
-\`/roleadd twitch @rol\` — Agregar moderadores Twitch *(solo admins)*
-\`/transcript channel #canal\` — Canal de transcripciones *(solo admins)*
-
-**💬 Generales:**
-\`!say #canal <mensaje>\`
-\`!ping\`
-\`!lock\`
-\`!unlock\`
-\`!help\`
-`;
-
-  await message.reply(helpMessage);
-
+  await message.reply({ embeds: [await buildHelpEmbed()] });
 }
 
 

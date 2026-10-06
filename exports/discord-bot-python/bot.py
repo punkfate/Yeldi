@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import html
 import json
 import logging
@@ -641,12 +642,22 @@ async def scan_ticket_panels(
     guild: discord.Guild,
     *,
     full_history: bool,
+    candidate_channels_only: bool = False,
+    include_channel_ids: set[str] | None = None,
 ) -> tuple[list[discord.Message], int]:
     panels: list[discord.Message] = []
     inaccessible = 0
     if not bot.user:
         return panels, inaccessible
+    included_ids = include_channel_ids or set()
     for channel in guild.text_channels:
+        channel_name = f"{channel.name} {channel.category.name if channel.category else ''}".lower()
+        likely_panel_channel = any(
+            word in channel_name
+            for word in ("ticket", "soporte", "support", "panel", "ayuda", "abrir")
+        )
+        if candidate_channels_only and not likely_panel_channel and str(channel.id) not in included_ids:
+            continue
         try:
             async for message in channel.history(
                 limit=None if full_history else 100,
@@ -676,7 +687,12 @@ async def reconcile_panels_on_startup(guild: discord.Guild) -> None:
             except (discord.NotFound, discord.Forbidden, discord.HTTPException):
                 saved_message = None
 
-    panels, _ = await scan_ticket_panels(guild, full_history=False)
+    panels, _ = await scan_ticket_panels(
+        guild,
+        full_history=False,
+        candidate_channels_only=True,
+        include_channel_ids={str(saved.get("channelId"))} if saved else set(),
+    )
     if saved_message and all(message.id != saved_message.id for message in panels):
         panels.append(saved_message)
     if not panels:
@@ -703,6 +719,47 @@ async def reconcile_panels_on_startup(guild: discord.Guild) -> None:
             log.warning("No se pudo borrar un panel duplicado en #%s", duplicate.channel.name)
 
 
+async def cleanup_recent_ticket_panels(
+    guild: discord.Guild,
+    bot_user_id: int,
+    keep_message_id: int,
+    previous_panel: dict[str, Any] | None,
+    current_channel_id: int,
+) -> tuple[int, int, int]:
+    include_ids = {str(current_channel_id)}
+    if previous_panel:
+        include_ids.add(str(previous_panel.get("channelId", "")))
+
+    panels, inaccessible = await scan_ticket_panels(
+        guild,
+        full_history=False,
+        candidate_channels_only=True,
+        include_channel_ids=include_ids,
+    )
+    if previous_panel:
+        old_channel = guild.get_channel(int(previous_panel.get("channelId", 0)))
+        if isinstance(old_channel, discord.TextChannel):
+            try:
+                old_message = await old_channel.fetch_message(int(previous_panel.get("messageId", 0)))
+                if is_ticket_panel(old_message, bot_user_id):
+                    panels.append(old_message)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
+
+    unique_panels = {message.id: message for message in panels}
+    deleted = 0
+    failed = 0
+    for panel in unique_panels.values():
+        if panel.id == keep_message_id:
+            continue
+        try:
+            await panel.delete()
+            deleted += 1
+        except (discord.Forbidden, discord.HTTPException):
+            failed += 1
+    return deleted, failed, inaccessible
+
+
 async def publish_ticket_panel(interaction: discord.Interaction) -> None:
     if not interaction.guild or not isinstance(interaction.channel, discord.TextChannel):
         await interaction.response.send_message(
@@ -711,15 +768,8 @@ async def publish_ticket_panel(interaction: discord.Interaction) -> None:
         )
         return
     await interaction.response.defer(ephemeral=True, thinking=True)
-    panels, inaccessible = await scan_ticket_panels(interaction.guild, full_history=True)
-    deleted = 0
-    failed = 0
-    for panel in panels:
-        try:
-            await panel.delete()
-            deleted += 1
-        except (discord.Forbidden, discord.HTTPException):
-            failed += 1
+    config = guild_config(interaction.guild.id)
+    previous_panel = config.get("ticketPanel")
 
     message = await interaction.channel.send(
         embed=build_panel_embed(),
@@ -731,16 +781,30 @@ async def publish_ticket_panel(interaction: discord.Interaction) -> None:
         "messageId": str(message.id),
     }
     save_state()
-    notes = []
-    if failed:
-        notes.append(f"{failed} panel(es) no se pudieron borrar por permisos.")
-    if inaccessible:
-        notes.append(f"No se pudo revisar el historial de {inaccessible} canal(es).")
-    suffix = f" {' '.join(notes)}" if notes else ""
     await interaction.followup.send(
-        f"✅ Panel actualizado. Se eliminaron {deleted} panel(es) anteriores; queda solo el nuevo.{suffix}",
+        "✅ Panel publicado. La limpieza de paneles recientes anteriores se hará en segundo plano.",
         ephemeral=True,
     )
+    async def finish_cleanup() -> None:
+        try:
+            deleted, failed, inaccessible = await cleanup_recent_ticket_panels(
+                interaction.guild,
+                bot.user.id,
+                message.id,
+                previous_panel,
+                interaction.channel.id,
+            )
+            log.info(
+                "Limpieza de paneles en %s: %s eliminados, %s fallidos, %s canales sin acceso.",
+                interaction.guild.name,
+                deleted,
+                failed,
+                inaccessible,
+            )
+        except Exception:
+            log.exception("Error al limpiar paneles antiguos en segundo plano")
+
+    asyncio.create_task(finish_cleanup())
 
 
 class JesterBot(commands.Bot):
@@ -784,7 +848,14 @@ class JesterBot(commands.Bot):
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot or not message.guild or not message.content.startswith(PREFIX):
             return
-        parts = message.content[len(PREFIX):].strip().split()
+        parts = re.findall(
+            r'"[^"]*"|\'[^\']*\'|\S+',
+            message.content[len(PREFIX):].strip(),
+        )
+        parts = [
+            part[1:-1] if len(part) >= 2 and part[0] == part[-1] and part[0] in {"'", '"'} else part
+            for part in parts
+        ]
         if not parts:
             return
         command, *args = parts
@@ -803,9 +874,9 @@ class JesterBot(commands.Bot):
             return
         try:
             if command == "help":
-                await message.reply(help_text())
+                await message.reply(embed=build_help_embed())
             elif command == "say":
-                await prefix_say(message)
+                await prefix_say(message, args)
             elif command == "lock":
                 await set_channel_lock(message.channel, message.guild.default_role, True)
                 await message.reply("🔒 ¡Canal bloqueado!")
@@ -835,16 +906,42 @@ class JesterBot(commands.Bot):
 bot = JesterBot()
 
 
-def help_text() -> str:
-    return (
-        "**🤖 Comandos del Bot**\n\n"
-        "**🎫 Tickets:** `/tickets panel`, `/roleadd staff`, `/roleadd manager`, "
-        "`/roleadd twitch`, `/transcript channel`\n"
-        "**🛡️ Moderación:** `/kick`, `/ban`, `/unban`, `/mute`, `/unmute`, `/clear`\n"
-        "**💬 Generales:** `/hola`, `/info`, `/ping`, `/say`, `/lock`, `/unlock`, `/help`\n"
-        "**Prefijo `!`:** `!hola`, `!info`, `!ping`, `!say`, `!lock`, `!unlock`, "
-        "`!clear`, `!kick`, `!ban`, `!unban`, `!mute`, `!unmute`, `!help`"
+def build_help_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title="🤖 Comandos del Bot",
+        color=discord.Color.blurple(),
     )
+    embed.add_field(
+        name="🎫 Sistema de Tickets",
+        value=(
+            "`/tickets panel` — Publicar el panel\n"
+            "`/roleadd staff @rol`, `/roleadd manager @rol`, `/roleadd twitch @rol`\n"
+            "`/transcript channel #canal` — Elegir canal de transcripciones"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="🛡️ Moderación",
+        value="`/kick`, `/ban`, `/unban`, `/mute`, `/unmute`, `/clear`",
+        inline=False,
+    )
+    embed.add_field(
+        name="💬 Generales",
+        value="`/hola`, `/info`, `/ping`, `/say`, `/lock`, `/unlock`, `/help`",
+        inline=False,
+    )
+    embed.add_field(
+        name="⌨️ Comandos con prefijo !",
+        value=(
+            "`!hola`, `!info`, `!ping`, `!say`, `!lock`, `!unlock`, `!clear`\n"
+            "`!kick`, `!ban`, `!unban`, `!mute`, `!unmute`, `!help`\n"
+            "En `!kick`, `!ban`, `!mute` y `!unmute` puedes usar nombre exacto o ID; "
+            "pon entre comillas los nombres con espacios. `!unban` usa un ID."
+        ),
+        inline=False,
+    )
+    embed.set_footer(text="Los comandos de moderación requieren permisos de Administrador.")
+    return embed
 
 
 def server_info_embed(guild: discord.Guild) -> discord.Embed:
@@ -881,7 +978,7 @@ async def hola(interaction: discord.Interaction) -> None:
 
 @bot.tree.command(name="help", description="Mostrar todos los comandos disponibles")
 async def help_command(interaction: discord.Interaction) -> None:
-    await interaction.response.send_message(help_text(), ephemeral=True)
+    await interaction.response.send_message(embed=build_help_embed(), ephemeral=True)
 
 
 @bot.tree.command(name="info", description="Muestra información del servidor")
@@ -1112,14 +1209,12 @@ async def unmute(interaction: discord.Interaction, miembro: discord.Member) -> N
     await interaction.response.send_message(text, ephemeral=True)
 
 
-async def prefix_say(message: discord.Message) -> None:
+async def prefix_say(message: discord.Message, args: list[str]) -> None:
     if not message.channel_mentions:
         await message.reply("Uso: `!say #canal Tu mensaje aquí`")
         return
     target = message.channel_mentions[0]
-    raw = message.content.split(maxsplit=1)
-    rest = raw[1] if len(raw) > 1 else ""
-    rest = re.sub(r"<#\d+>", "", rest, count=1).strip()
+    rest = " ".join(args[1:]).strip()
     if not rest:
         await message.reply("Escribe el mensaje que quieres enviar.")
         return
@@ -1132,29 +1227,78 @@ async def prefix_member_action(
     action: str,
     args: list[str],
 ) -> None:
-    if action in {"kick", "ban", "mute", "unmute"}:
-        if not message.mentions:
-            await message.reply(f"Menciona a un miembro. Uso: `!{action} @usuario [razón]`")
-            return
-        member = message.mentions[0]
-        reason = " ".join(args[1:]) or "Sin razón especificada"
-        if action == "kick":
-            await member.kick(reason=reason)
-            await message.reply(f"👢 **{member}** ha sido expulsado. Razón: {reason}")
-        elif action == "ban":
-            await member.ban(reason=reason)
-            await message.reply(f"🔨 **{member}** ha sido baneado. Razón: {reason}")
-        elif action == "mute":
-            role = await get_muted_role(message.guild)
-            await member.add_roles(role, reason=reason)
-            await message.reply(f"🔇 **{member}** ha sido silenciado.")
+    target = args[0] if args else ""
+    if not target:
+        await message.reply(
+            f"Uso: `!{action} usuario|ID|@mención [\"razón\"]`"
+        )
+        return
+    target_id = re.fullmatch(r"<@!?(\d+)>", target)
+    raw_id = target_id.group(1) if target_id else target
+    if raw_id.isdigit():
+        try:
+            member = message.guild.get_member(int(raw_id)) or await message.guild.fetch_member(int(raw_id))
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            member = None
+        matches = []
+    else:
+        query = target.removeprefix("@").strip()
+        normalized = query.casefold()
+
+        def exact_match(candidate: discord.Member) -> bool:
+            names = {
+                candidate.name,
+                candidate.display_name,
+                candidate.global_name or "",
+                str(candidate),
+            }
+            return any(name.casefold() == normalized for name in names)
+
+        candidates = {
+            candidate.id: candidate
+            for candidate in message.guild.members
+            if exact_match(candidate)
+        }
+        if len(candidates) != 1 and query:
+            try:
+                for candidate in await message.guild.query_members(query=query, limit=100):
+                    if exact_match(candidate):
+                        candidates[candidate.id] = candidate
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+        matches = list(candidates.values())
+        member = matches[0] if len(matches) == 1 else None
+
+    if not member:
+        if len(matches) > 1:
+            examples = ", ".join(f"{item} ({item.id})" for item in matches[:5])
+            await message.reply(
+                f"Encontré varios miembros con ese nombre. Usa su ID o una mención: {examples}"
+            )
         else:
-            role = discord.utils.get(message.guild.roles, name="Muted")
-            if role and role in member.roles:
-                await member.remove_roles(role)
-                await message.reply(f"🔊 **{member}** ya puede hablar de nuevo.")
-            else:
-                await message.reply("❌ Ese miembro no está silenciado.")
+            await message.reply(
+                f"No encontré ese miembro. Uso: `!{action} usuario|ID|@mención [\"razón\"]`"
+            )
+        return
+
+    reason = " ".join(args[1:]) or "Sin razón especificada"
+    if action == "kick":
+        await member.kick(reason=reason)
+        await message.reply(f"👢 **{member}** ha sido expulsado. Razón: {reason}")
+    elif action == "ban":
+        await member.ban(reason=reason)
+        await message.reply(f"🔨 **{member}** ha sido baneado. Razón: {reason}")
+    elif action == "mute":
+        role = await get_muted_role(message.guild)
+        await member.add_roles(role, reason=reason)
+        await message.reply(f"🔇 **{member}** ha sido silenciado.")
+    elif action == "unmute":
+        role = discord.utils.get(message.guild.roles, name="Muted")
+        if role and role in member.roles:
+            await member.remove_roles(role)
+            await message.reply(f"🔊 **{member}** ya puede hablar de nuevo.")
+        else:
+            await message.reply("❌ Ese miembro no está silenciado.")
 
 
 @bot.tree.error

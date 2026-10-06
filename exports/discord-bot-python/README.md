@@ -51,9 +51,11 @@ El rol del bot debe estar por encima de los roles que administra. Si falta un pe
 - Tickets: `/tickets panel`, `/roleadd staff`, `/roleadd manager`, `/roleadd twitch`, `/transcript channel`.
 - Comandos con prefijo `!`: `!ping`, `!hola`, `!info`, `!help`, `!say`, `!lock`, `!unlock`, `!clear`, `!kick`, `!ban`, `!unban`, `!mute`, `!unmute`.
 
+`/help` y `!help` muestran un embed. `!kick`, `!ban`, `!mute` y `!unmute` aceptan una mención, un ID o el nombre exacto del miembro; usa comillas para nombres con espacios, por ejemplo `!mute "Nombre Apellido" spam`. `!unban` requiere el ID.
+
 Los tickets de Administración solo los ve la persona que los abre, los administradores y los roles añadidos con `/roleadd manager`. Los tickets de Twitch solo los ve la persona que los abre, los administradores y los roles añadidos con `/roleadd twitch`.
 
-El comando `/tickets panel` sustituye paneles antiguos del bot en los canales donde pueda leer el historial y publica uno nuevo en el canal donde se ejecutó.
+El comando `/tickets panel` publica el nuevo panel inmediatamente y limpia paneles recientes antiguos en segundo plano. Para ello necesita permiso para ver canales, leer historial y gestionar mensajes.
 
 ## Migración desde el bot JavaScript
 
