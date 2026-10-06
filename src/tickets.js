@@ -47,6 +47,32 @@ const LEGACY_TICKET_PANEL_CUSTOM_IDS = new Set([
   'jester_ticket_category_v2'
 ]);
 
+function isTicketPanelMessage(message, botId) {
+  if (message.author.id !== botId) return false;
+
+  const hasTicketTitle = message.embeds?.some(embed =>
+    /sistema de tickets|panel de tickets/i.test(
+      `${embed.title || ''} ${embed.description || ''}`
+    )
+  );
+
+  const hasTicketSelect = message.components?.some(row =>
+    row.components?.some(component => {
+      const customId = component.customId || '';
+      const hasCategoryOptions = Array.isArray(component.options) &&
+        component.options.some(option =>
+          ['report', 'general', 'admin_support', 'twitch_support', 'administration', 'twitch']
+            .includes(option.value)
+        );
+      return LEGACY_TICKET_PANEL_CUSTOM_IDS.has(customId) ||
+        hasCategoryOptions ||
+        (/ticket|categor|support/i.test(customId) && component.options);
+    })
+  );
+
+  return hasTicketTitle || hasTicketSelect;
+}
+
 export async function handleTicketsPanel(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
@@ -125,17 +151,29 @@ export async function handleTicketsPanel(interaction) {
 
     // Reemplaza únicamente los paneles de tickets publicados por este bot
     // en el canal actual para que nunca queden categorías antiguas visibles.
-    const recentMessages = await channel.messages.fetch({ limit: 100 });
-    const oldPanels = recentMessages.filter(message =>
-      message.author.id === interaction.client.user.id &&
-      message.components.some(componentRow =>
-        componentRow.components?.some(component =>
-          LEGACY_TICKET_PANEL_CUSTOM_IDS.has(component.customId)
-        )
-      )
-    );
+    const panelMessages = [];
+    let before;
 
-    await Promise.all([...oldPanels.values()].map(message => message.delete().catch(() => {})));
+    // Recorre el historial para eliminar también paneles antiguos que ya no
+    // estén entre los últimos 100 mensajes del canal.
+    while (true) {
+      const messages = await channel.messages.fetch({
+        limit: 100,
+        ...(before ? { before } : {})
+      });
+
+      if (!messages.size) break;
+      panelMessages.push(
+        ...messages.filter(message =>
+          isTicketPanelMessage(message, interaction.client.user.id)
+        ).values()
+      );
+
+      if (messages.size < 100) break;
+      before = messages.last().id;
+    }
+
+    await Promise.all(panelMessages.map(message => message.delete().catch(() => {})));
     await channel.send({ embeds: [embed], components: [row] });
     await interaction.editReply({ content: '✅ ¡Panel de tickets publicado!' });
   } catch (error) {

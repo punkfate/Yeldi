@@ -24,6 +24,7 @@ function ensureGuild(config, guildId) {
       staffRoles: [],
       managerRoles: [],
       twitchModRoles: [],
+      ticketPanel: null,
       tickets: {},
       ticketCounter: 0,
       transcriptChannel: null
@@ -34,6 +35,9 @@ function ensureGuild(config, guildId) {
   }
   if (!('twitchModRoles' in config[guildId])) {
     config[guildId].twitchModRoles = [];
+  }
+  if (!('ticketPanel' in config[guildId])) {
+    config[guildId].ticketPanel = null;
   }
   if (!('transcriptChannel' in config[guildId])) {
     config[guildId].transcriptChannel = null;
@@ -91,6 +95,18 @@ export function setTranscriptChannel(guildId, channelId) {
 export function getTranscriptChannel(guildId) {
   const config = loadConfig();
   return config[guildId]?.transcriptChannel || null;
+}
+
+export function getTicketPanel(guildId) {
+  const config = loadConfig();
+  return config[guildId]?.ticketPanel || null;
+}
+
+export function setTicketPanel(guildId, channelId, messageId) {
+  let config = loadConfig();
+  config = ensureGuild(config, guildId);
+  config[guildId].ticketPanel = { channelId, messageId };
+  saveConfig(config);
 }
 
 export function createTicket(guildId, channelId, userId, ticketNumber, category, fields) {
