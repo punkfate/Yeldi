@@ -16,7 +16,8 @@ import {
   handleModalGeneral,
   handleClaimTicket,
   handleUnclaimTicket,
-  handleCloseTicket
+  handleCloseTicket,
+  reconcileTicketPanels
 } from './tickets.js';
 
 const transcriptServer = createServer((request, response) => {
@@ -374,6 +375,9 @@ async function main() {
         );
 
         await registerSlashCommands(client);
+        reconcileTicketPanels(client).catch(error => {
+          console.error('Error al reconciliar paneles de tickets:', error);
+        });
 
         console.log('Comandos disponibles:');
         console.log('  /say #canal <mensaje>');

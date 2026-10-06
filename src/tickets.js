@@ -23,7 +23,9 @@ import {
   unclaimTicket,
   deleteTicket,
   nextTicketNumber,
-  getTranscriptChannel
+  getTranscriptChannel,
+  getTicketPanel,
+  setTicketPanel
 } from './ticketConfig.js';
 import { getTranscriptUrl, saveTranscript } from './transcripts.js';
 
@@ -41,11 +43,74 @@ const CATEGORY_COLORS = {
   twitch_support: 0x9146ff
 };
 
-const TICKET_PANEL_CUSTOM_ID = 'jester_ticket_category_v2';
+const TICKET_PANEL_CUSTOM_ID = 'jester_ticket_category_v3';
 const LEGACY_TICKET_PANEL_CUSTOM_IDS = new Set([
   'ticket_category',
-  'jester_ticket_category_v2'
+  'jester_ticket_category_v2',
+  'jester_ticket_category_v3',
+  'ticket_category_select',
+  'ticket_menu',
+  'ticket_select',
+  'panel_tickets'
 ]);
+
+function buildTicketPanelPayload() {
+  const embed = new EmbedBuilder()
+    .setTitle("🎫 Sistema de Tickets — Jester's Club")
+    .setDescription(
+      "Bienvenido al sistema oficial de soporte de **Jester's Club**.\nSelecciona la categoría correspondiente."
+    )
+    .addFields(
+      { name: '🚨 Reportes', value: 'Informa sobre usuarios que hayan incumplido las normas.', inline: false },
+      { name: '❓ Dudas Generales', value: 'Preguntas o ayuda general relacionada con Jester’s Club.', inline: false },
+      { name: '🛠️ Soporte de Administración', value: 'Privado: lo verá quien abre el ticket, los administradores y el rol configurado con `/roleadd manager`.', inline: false },
+      { name: '🎥 Soporte de Twitch', value: 'Privado: lo verá quien abre el ticket, los administradores y el rol configurado con `/roleadd twitch`.', inline: false },
+      {
+        name: '📋 Normas',
+        value: [
+          '> • Sé respetuoso con el staff.',
+          '> • Abre un solo ticket por asunto.',
+          '> • Proporciona información clara y detallada.',
+          '> • En reportes, incluye evidencia si es posible.'
+        ].join('\n'),
+        inline: false
+      }
+    )
+    .setColor(0x5865f2)
+    .setFooter({ text: 'Usa el menú desplegable para abrir tu ticket' })
+    .setTimestamp();
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(TICKET_PANEL_CUSTOM_ID)
+    .setPlaceholder('📂 Selecciona una categoría...')
+    .addOptions(
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Reportes')
+        .setDescription('Reporta a un usuario que haya infringido las normas')
+        .setEmoji('🚨')
+        .setValue('report'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Dudas Generales')
+        .setDescription('Pregunta o pide ayuda')
+        .setEmoji('❓')
+        .setValue('general'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Soporte de Administración')
+        .setDescription('Administradores y rol manager configurado')
+        .setEmoji('🛠️')
+        .setValue('admin_support'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Soporte de Twitch')
+        .setDescription('Administradores y rol de Twitch configurado')
+        .setEmoji('🎥')
+        .setValue('twitch_support')
+    );
+
+  return {
+    embeds: [embed],
+    components: [new ActionRowBuilder().addComponents(select)]
+  };
+}
 
 function isTicketPanelMessage(message, botId) {
   if (message.author.id !== botId) return false;
@@ -62,15 +127,121 @@ function isTicketPanelMessage(message, botId) {
       const hasCategoryOptions = Array.isArray(component.options) &&
         component.options.some(option =>
           ['report', 'general', 'admin_support', 'twitch_support', 'administration', 'twitch']
-            .includes(option.value)
+            .includes(String(option.value || '').toLowerCase()) ||
+          /reporte|report|duda|general|administr|postul|twitch/i
+            .test(`${option.label || ''} ${option.description || ''}`)
         );
       return LEGACY_TICKET_PANEL_CUSTOM_IDS.has(customId) ||
+        (Array.isArray(component.options) && component.options.length >= 3) ||
         hasCategoryOptions ||
         (/ticket|categor|support/i.test(customId) && component.options);
     })
   );
 
   return hasTicketTitle || hasTicketSelect;
+}
+
+function isLikelyTicketPanelChannel(channel) {
+  const name = `${channel.name || ''} ${channel.parent?.name || ''}`
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase();
+  return /ticket|soporte|support|panel|ayuda|abrir/.test(name);
+}
+
+async function findTicketPanelsInGuild(
+  guild,
+  botId,
+  { fullHistory = false, candidateChannelsOnly = false } = {}
+) {
+  const panels = [];
+
+  for (const channel of guild.channels.cache.values()) {
+    if (!channel.isTextBased() || !channel.messages) continue;
+    if (candidateChannelsOnly && !isLikelyTicketPanelChannel(channel)) continue;
+
+    let before;
+    try {
+      while (true) {
+        const messages = await channel.messages.fetch({
+          limit: 100,
+          ...(before ? { before } : {})
+        });
+        if (!messages.size) break;
+
+        panels.push(
+          ...messages.filter(message => isTicketPanelMessage(message, botId)).values()
+        );
+        if (!fullHistory || messages.size < 100) break;
+        before = messages.last().id;
+      }
+    } catch (error) {
+      console.warn(
+        `No se pudo revisar #${channel.name} (${channel.id}): ${error.message}`
+      );
+    }
+  }
+
+  return panels.sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+}
+
+async function deleteTicketPanelsInGuild(guild, botId) {
+  const panels = await findTicketPanelsInGuild(guild, botId, { fullHistory: true });
+  const results = await Promise.allSettled(panels.map(message => message.delete()));
+  return {
+    found: panels.length,
+    deleted: results.filter(result => result.status === 'fulfilled').length,
+    failed: results.filter(result => result.status === 'rejected').length
+  };
+}
+
+export async function reconcileTicketPanels(client) {
+  for (const guild of client.guilds.cache.values()) {
+    const savedPanel = getTicketPanel(guild.id);
+    console.log(`Revisando panel de tickets al iniciar en ${guild.name}...`);
+    if (savedPanel) {
+      try {
+        const channel = await guild.channels.fetch(savedPanel.channelId);
+        const message = channel?.isTextBased()
+          ? await channel.messages.fetch(savedPanel.messageId)
+          : null;
+        if (message) {
+          await message.edit(buildTicketPanelPayload());
+          console.log(`Panel de tickets actualizado en ${guild.name}.`);
+          continue;
+        }
+      } catch (error) {
+        console.warn(`Panel guardado no accesible en ${guild.name}: ${error.message}`);
+      }
+    }
+
+    const panels = await findTicketPanelsInGuild(guild, client.user.id, {
+      fullHistory: true,
+      candidateChannelsOnly: true
+    });
+    console.log(
+      `Búsqueda de paneles en ${guild.name}: ${panels.length} panel(es) encontrado(s).`
+    );
+    if (!panels.length) {
+      console.warn(
+        `No hay un panel guardado ni se detectaron paneles de tickets en ${guild.name}; ejecuta /tickets panel en el canal deseado.`
+      );
+      continue;
+    }
+
+    const [latestPanel, ...duplicates] = panels;
+    try {
+      await latestPanel.edit(buildTicketPanelPayload());
+      setTicketPanel(guild.id, latestPanel.channelId, latestPanel.id);
+      const results = await Promise.allSettled(duplicates.map(message => message.delete()));
+      const deleted = results.filter(result => result.status === 'fulfilled').length;
+      console.log(
+        `Panel reconciliado en ${guild.name}: se conservó el más reciente y se eliminaron ${deleted} duplicados.`
+      );
+    } catch (error) {
+      console.error(`No se pudo reconciliar el panel en ${guild.name}:`, error);
+    }
+  }
 }
 
 export async function handleTicketsPanel(interaction) {
@@ -148,37 +319,28 @@ export async function handleTicketsPanel(interaction) {
 
   try {
     const channel = interaction.channel ?? await interaction.client.channels.fetch(interaction.channelId);
-
-    // Reemplaza únicamente los paneles de tickets publicados por este bot
-    // en el canal actual para que nunca queden categorías antiguas visibles.
-    const panelMessages = [];
-    let before;
-
-    // Recorre el historial para eliminar también paneles antiguos que ya no
-    // estén entre los últimos 100 mensajes del canal.
-    while (true) {
-      const messages = await channel.messages.fetch({
-        limit: 100,
-        ...(before ? { before } : {})
-      });
-
-      if (!messages.size) break;
-      panelMessages.push(
-        ...messages.filter(message =>
-          isTicketPanelMessage(message, interaction.client.user.id)
-        ).values()
-      );
-
-      if (messages.size < 100) break;
-      before = messages.last().id;
+    if (!channel?.isTextBased() || !channel.messages) {
+      throw new Error('El canal no admite mensajes.');
     }
 
-    await Promise.all(panelMessages.map(message => message.delete().catch(() => {})));
-    await channel.send({ embeds: [embed], components: [row] });
-    await interaction.editReply({ content: '✅ ¡Panel de tickets publicado!' });
+    const cleanup = await deleteTicketPanelsInGuild(
+      interaction.guild,
+      interaction.client.user.id
+    );
+    const panelMessage = await channel.send(buildTicketPanelPayload());
+    setTicketPanel(interaction.guild.id, channel.id, panelMessage.id);
+
+    const failureNote = cleanup.failed
+      ? ` No se pudieron borrar ${cleanup.failed}; revisa el permiso Gestionar mensajes en esos canales.`
+      : '';
+    await interaction.editReply({
+      content: `✅ Panel actualizado. Se eliminaron ${cleanup.deleted} paneles anteriores; queda solo el nuevo.${failureNote}`
+    });
   } catch (error) {
-    console.error('Error al enviar el panel de tickets:', error);
-    await interaction.editReply({ content: '❌ No se pudo publicar el panel. Verifica los permisos del bot en este canal.' });
+    console.error('Error al reemplazar el panel de tickets:', error);
+    await interaction.editReply({
+      content: '❌ No se pudo reemplazar el panel. El bot necesita ver los canales, leer el historial, enviar mensajes y gestionar mensajes.'
+    });
   }
 }
 
