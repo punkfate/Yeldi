@@ -51,7 +51,9 @@ El rol del bot debe estar por encima de los roles que administra. Si falta un pe
 - Tickets: `/tickets panel`, `/roleadd staff`, `/roleadd manager`, `/roleadd twitch`, `/transcript channel`.
 - Comandos con prefijo `!`: `!ping`, `!hola`, `!info`, `!help`, `!say`, `!lock`, `!unlock`, `!clear`, `!kick`, `!ban`, `!unban`, `!mute`, `!unmute`.
 
-`/help` y `!help` muestran un embed. `!kick`, `!ban`, `!mute` y `!unmute` aceptan una mención, un ID o el nombre exacto del miembro; usa comillas para nombres con espacios, por ejemplo `!mute "Nombre Apellido" spam`. `!unban` requiere el ID.
+`/help` y `!help` muestran un embed. `!kick`, `!ban`, `!mute` y `!unmute` aceptan una mención, un ID o el nombre exacto del miembro; escribe la razón después del usuario y usa comillas para nombres con espacios, por ejemplo `!mute "Nombre Apellido" spam`. `/unban` y `!unban` aceptan un ID y una razón opcional. Si no indicas razón, el bot muestra `Razón no especificada`. Las respuestas mencionan al miembro sancionado.
+
+En los reportes se pueden seleccionar hasta 25 usuarios. Al abrir un ticket, el bot muestra un enlace `#canal` clicable; las acciones de los botones y el cierre se anuncian con embeds.
 
 Los tickets de Administración solo los ve la persona que los abre, los administradores y los roles añadidos con `/roleadd manager`. Los tickets de Twitch solo los ve la persona que los abre, los administradores y los roles añadidos con `/roleadd twitch`.
 

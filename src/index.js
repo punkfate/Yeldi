@@ -225,6 +225,12 @@ const slashCommands = [
         .setName('id')
         .setDescription('ID del usuario a desbanear')
         .setRequired(true)
+    )
+    .addStringOption(option =>
+      option
+        .setName('razon')
+        .setDescription('Razón del desbaneo')
+        .setRequired(false)
     ),
 
   new SlashCommandBuilder()
@@ -253,6 +259,12 @@ const slashCommands = [
         .setName('miembro')
         .setDescription('Miembro al que quitar el silencio')
         .setRequired(true)
+    )
+    .addStringOption(option =>
+      option
+        .setName('razon')
+        .setDescription('Razón para quitar el silencio')
+        .setRequired(false)
     )
 
 ];
@@ -1082,7 +1094,11 @@ async function buildHelpEmbed() {
       },
       {
         name: '🛡️ Moderación',
-        value: '`/kick`, `/ban`, `/unban`, `/mute`, `/unmute`, `/clear`'
+        value: [
+          '`/kick`, `/ban`, `/mute`, `/unmute` — miembro y razón opcional',
+          '`/unban` — ID y razón opcional; los comandos `!` reciben primero el usuario/ID y luego la razón.',
+          'Si no indicas razón, se usará “Razón no especificada”.'
+        ].join('\n')
       },
       {
         name: '💬 Generales',
@@ -1093,7 +1109,7 @@ async function buildHelpEmbed() {
         value: [
           '`!hola`, `!info`, `!ping`, `!say`, `!lock`, `!unlock`, `!clear`',
           '`!kick`, `!ban`, `!unban`, `!mute`, `!unmute`, `!help`',
-          'En `!kick`, `!ban`, `!mute` y `!unmute` puedes usar nombre exacto o ID; pon entre comillas los nombres con espacios. `!unban` usa un ID.'
+          'En `!kick`, `!ban`, `!mute` y `!unmute` puedes usar mención, nombre exacto o ID; pon entre comillas los nombres con espacios. Añade la razón después del usuario. `!unban` usa ID y acepta razón.'
         ].join('\n')
       }
     )
@@ -1182,14 +1198,14 @@ async function handleSlashKick(interaction) {
     interaction.options.getMember('miembro');
 
   const razon =
-    interaction.options.getString('razon')
-    ?? 'Sin razón especificada';
+    interaction.options.getString('razon')?.trim()
+    || 'Razón no especificada';
 
   await miembro.kick(razon);
 
   await interaction.reply({
     content:
-      `👢 **${miembro.user.tag}** ha sido expulsado. Razón: ${razon}`,
+      `👢 <@${miembro.id}> ha sido expulsado. Razón: ${razon}`,
     ephemeral: true
   });
 
@@ -1202,8 +1218,8 @@ async function handleSlashBan(interaction) {
     interaction.options.getMember('miembro');
 
   const razon =
-    interaction.options.getString('razon')
-    ?? 'Sin razón especificada';
+    interaction.options.getString('razon')?.trim()
+    || 'Razón no especificada';
 
   await miembro.ban({
     reason: razon
@@ -1211,7 +1227,7 @@ async function handleSlashBan(interaction) {
 
   await interaction.reply({
     content:
-      `🔨 **${miembro.user.tag}** ha sido baneado. Razón: ${razon}`,
+      `🔨 <@${miembro.id}> ha sido baneado. Razón: ${razon}`,
     ephemeral: true
   });
 
@@ -1222,14 +1238,17 @@ async function handleSlashUnban(interaction) {
 
   const id =
     interaction.options.getString('id');
+  const razon =
+    interaction.options.getString('razon')?.trim()
+    || 'Razón no especificada';
 
   try {
 
-    await interaction.guild.members.unban(id);
+    await interaction.guild.members.unban(id, razon);
 
     await interaction.reply({
       content:
-        `✅ Usuario con ID **${id}** desbaneado.`,
+        `✅ <@${id}> ha sido desbaneado. Razón: ${razon}`,
       ephemeral: true
     });
 
@@ -1252,8 +1271,8 @@ async function handleSlashMute(interaction) {
     interaction.options.getMember('miembro');
 
   const razon =
-    interaction.options.getString('razon')
-    ?? 'Sin razón especificada';
+    interaction.options.getString('razon')?.trim()
+    || 'Razón no especificada';
 
   let role =
     interaction.guild.roles.cache.find(
@@ -1294,7 +1313,7 @@ async function handleSlashMute(interaction) {
 
   await interaction.reply({
     content:
-      `🔇 **${miembro.user.tag}** ha sido silenciado. Razón: ${razon}`,
+      `🔇 <@${miembro.id}> ha sido silenciado. Razón: ${razon}`,
     ephemeral: true
   });
 
@@ -1305,6 +1324,9 @@ async function handleSlashUnmute(interaction) {
 
   const miembro =
     interaction.options.getMember('miembro');
+  const razon =
+    interaction.options.getString('razon')?.trim()
+    || 'Razón no especificada';
 
   const role =
     interaction.guild.roles.cache.find(
@@ -1316,11 +1338,11 @@ async function handleSlashUnmute(interaction) {
     miembro.roles.cache.has(role.id)
   ) {
 
-    await miembro.roles.remove(role);
+    await miembro.roles.remove(role, razon);
 
     await interaction.reply({
       content:
-        `🔊 **${miembro.user.tag}** ya puede hablar de nuevo.`,
+        `🔊 <@${miembro.id}> ya puede hablar de nuevo. Razón: ${razon}`,
       ephemeral: true
     });
 
@@ -1328,7 +1350,7 @@ async function handleSlashUnmute(interaction) {
 
     await interaction.reply({
       content:
-        '❌ Ese miembro no está silenciado.',
+        `❌ <@${miembro.id}> no está silenciado.`,
       ephemeral: true
     });
 
@@ -1456,7 +1478,7 @@ async function getPrefixModerationTarget(message, args, command) {
   if (result.member) {
     return {
       member: result.member,
-      reason: args.slice(1).join(' ') || 'Sin razón especificada'
+      reason: args.slice(1).join(' ').trim() || 'Razón no especificada'
     };
   }
 
@@ -1487,7 +1509,7 @@ async function handleKickMsg(message, args) {
   await miembro.kick(razon);
 
   await message.reply(
-    `👢 **${miembro.user.tag}** ha sido expulsado. Razón: ${razon}`
+    `👢 <@${miembro.id}> ha sido expulsado. Razón: ${razon}`
   );
 
 }
@@ -1504,7 +1526,7 @@ async function handleBanMsg(message, args) {
   });
 
   await message.reply(
-    `🔨 **${miembro.user.tag}** ha sido baneado. Razón: ${razon}`
+    `🔨 <@${miembro.id}> ha sido baneado. Razón: ${razon}`
   );
 
 }
@@ -1513,7 +1535,7 @@ async function handleBanMsg(message, args) {
 async function handleUnbanMsg(message, args) {
 
   const id =
-    args[0];
+    args[0]?.match(/^<@!?(\d+)>$/)?.[1] || args[0];
 
   if (!id) {
 
@@ -1526,10 +1548,11 @@ async function handleUnbanMsg(message, args) {
 
   try {
 
-    await message.guild.members.unban(id);
+    const razon = args.slice(1).join(' ').trim() || 'Razón no especificada';
+    await message.guild.members.unban(id, razon);
 
     await message.reply(
-      `✅ Usuario con ID **${id}** desbaneado.`
+      `✅ <@${id}> ha sido desbaneado. Razón: ${razon}`
     );
 
   } catch {
@@ -1581,13 +1604,10 @@ async function handleMuteMsg(message, args) {
 
   }
 
-  await miembro.roles.add(
-    role,
-    razon
-  );
+  await miembro.roles.add(role, razon);
 
   await message.reply(
-    `🔇 **${miembro.user.tag}** ha sido silenciado. Razón: ${razon}`
+    `🔇 <@${miembro.id}> ha sido silenciado. Razón: ${razon}`
   );
 
 }
@@ -1597,7 +1617,7 @@ async function handleUnmuteMsg(message, args) {
 
   const target = await getPrefixModerationTarget(message, args, 'unmute');
   if (!target) return;
-  const miembro = target.member;
+  const { member: miembro, reason: razon } = target;
 
   const role =
     message.guild.roles.cache.find(
@@ -1609,16 +1629,16 @@ async function handleUnmuteMsg(message, args) {
     miembro.roles.cache.has(role.id)
   ) {
 
-    await miembro.roles.remove(role);
+    await miembro.roles.remove(role, razon);
 
     await message.reply(
-      `🔊 **${miembro.user.tag}** ya puede hablar de nuevo.`
+      `🔊 <@${miembro.id}> ya puede hablar de nuevo. Razón: ${razon}`
     );
 
   } else {
 
     await message.reply(
-      '❌ Ese miembro no está silenciado.'
+      `❌ <@${miembro.id}> no está silenciado.`
     );
 
   }

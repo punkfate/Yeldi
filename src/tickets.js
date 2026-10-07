@@ -53,6 +53,7 @@ const LEGACY_TICKET_PANEL_CUSTOM_IDS = new Set([
   'ticket_select',
   'panel_tickets'
 ]);
+const pendingReportSelections = new Map();
 
 function buildTicketPanelPayload() {
   const embed = new EmbedBuilder()
@@ -421,14 +422,14 @@ export async function handleCategorySelect(interaction) {
   if (category === 'report') {
     const userSelect = new UserSelectMenuBuilder()
       .setCustomId('report_user_select')
-      .setPlaceholder('Busca y selecciona al usuario a reportar...')
+      .setPlaceholder('Busca y selecciona hasta 25 usuarios...')
       .setMinValues(1)
-      .setMaxValues(1);
+      .setMaxValues(25);
 
     const row = new ActionRowBuilder().addComponents(userSelect);
 
     await interaction.reply({
-      content: '**🚨 Reporte — Paso 1/2:** Selecciona al usuario que quieres reportar:',
+      content: '**🚨 Reporte — Paso 1/2:** Selecciona hasta 25 personas que quieras reportar:',
       components: [row],
       ephemeral: true
     });
@@ -464,24 +465,28 @@ export async function handleCategorySelect(interaction) {
 }
 
 export async function handleReportUserSelect(interaction) {
-  const selectedUserId = interaction.values[0];
-  const selectedUser = interaction.guild.members.cache.get(selectedUserId)?.user
-    || await interaction.guild.members.fetch(selectedUserId).then(m => m.user).catch(() => null);
-
-  const displayName = selectedUser
-    ? `${selectedUser.username} (${selectedUserId})`
-    : selectedUserId;
+  const selectedUserIds = [...new Set(interaction.values)].slice(0, 25);
+  const now = Date.now();
+  for (const [token, selection] of pendingReportSelections) {
+    if (selection.expiresAt <= now) pendingReportSelections.delete(token);
+  }
+  const token = interaction.id;
+  pendingReportSelections.set(token, {
+    userIds: selectedUserIds,
+    expiresAt: now + 15 * 60 * 1000
+  });
 
   const modal = new ModalBuilder()
-    .setCustomId(`modal_ticket_report_${selectedUserId}`)
+    .setCustomId(`modal_ticket_report_${token}`)
     .setTitle('🚨 Reporte — Paso 2/2');
 
   const userDisplay = new TextInputBuilder()
     .setCustomId('reported_display')
-    .setLabel('Usuario a reportar')
-    .setStyle(TextInputStyle.Short)
-    .setValue(displayName)
+    .setLabel('Personas seleccionadas (no modificar)')
+    .setStyle(TextInputStyle.Paragraph)
+    .setValue(selectedUserIds.map(id => `<@${id}>`).join(', ').slice(0, 1000))
     .setRequired(true);
+  userDisplay.setMaxLength(1000);
 
   const reasonInput = new TextInputBuilder()
     .setCustomId('report_reason')
@@ -501,13 +506,16 @@ export async function handleReportUserSelect(interaction) {
 
 export async function handleModalReport(interaction) {
   await interaction.deferReply({ ephemeral: true });
-  const reportedUserId = interaction.customId.slice('modal_ticket_report_'.length);
+  const token = interaction.customId.slice('modal_ticket_report_'.length);
   const reportedDisplay = interaction.fields.getTextInputValue('reported_display');
   const reportReason = interaction.fields.getTextInputValue('report_reason');
-
-  const reportedUser = reportedUserId
-    ? `<@${reportedUserId}> — ${reportedDisplay}`
-    : reportedDisplay;
+  const selection = pendingReportSelections.get(token);
+  pendingReportSelections.delete(token);
+  const selectedUserIds = selection?.userIds
+    || [...reportedDisplay.matchAll(/<@!?(\d+)>/g)].map(match => match[1]);
+  const reportedUser = [...new Set(selectedUserIds)]
+    .map(id => `<@${id}>`)
+    .join(', ') || reportedDisplay;
 
   await openTicket(interaction, 'report', { reportedUser, reportReason });
 }
@@ -609,7 +617,7 @@ async function openTicket(interaction, category, fields) {
 
     createTicket(guild.id, ticketChannel.id, member.user.id, ticketNumber, category, fields);
 
-    const embed = buildNewTicketEmbed(ticketNumber, category, member, fields);
+    const embed = buildNewTicketEmbed(ticketNumber, category, member, fields, ticketChannel.id);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -632,9 +640,15 @@ async function openTicket(interaction, category, fields) {
     await ticketChannel.send({ content: `${member}`, embeds: [embed], components: [row] });
 
     if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content: `✅ Tu ticket ha sido creado: ${ticketChannel}`, components: [] });
+      await interaction.editReply({
+        content: `✅ Tu ticket ha sido creado: <#${ticketChannel.id}>`,
+        components: []
+      });
     } else {
-      await interaction.followUp({ content: `✅ Tu ticket ha sido creado: ${ticketChannel}`, ephemeral: true });
+      await interaction.followUp({
+        content: `✅ Tu ticket ha sido creado: <#${ticketChannel.id}>`,
+        ephemeral: true
+      });
     }
   } catch (error) {
     console.error('Error al crear el ticket:', error);
@@ -649,7 +663,7 @@ async function openTicket(interaction, category, fields) {
   }
 }
 
-function buildNewTicketEmbed(ticketNumber, category, member, fields) {
+function buildNewTicketEmbed(ticketNumber, category, member, fields, channelId) {
   const num = ticketNumber.toString().padStart(4, '0');
   const label = CATEGORY_LABELS[category] || '🎫 Ticket';
   const color = CATEGORY_COLORS[category] || 0x5865f2;
@@ -667,7 +681,8 @@ function buildNewTicketEmbed(ticketNumber, category, member, fields) {
     .addFields(
       { name: '👤 Abierto por', value: `${member}`, inline: true },
       { name: '📋 Estado', value: '🟢 Abierto', inline: true },
-      { name: '🛡️ Reclamado por', value: 'Nadie', inline: true }
+      { name: '🛡️ Reclamado por', value: 'Nadie', inline: true },
+      { name: '📍 Canal del ticket', value: `<#${channelId}>`, inline: false }
     )
     .setColor(color)
     .setTimestamp();
@@ -675,7 +690,7 @@ function buildNewTicketEmbed(ticketNumber, category, member, fields) {
   if (category === 'report') {
     embed.addFields(
       { name: '\u200b', value: '**— Detalles del Reporte —**', inline: false },
-      { name: '🎯 Usuario reportado', value: fields.reportedUser || '—', inline: false },
+      { name: '🎯 Personas reportadas', value: fields.reportedUser || '—', inline: false },
       { name: '📝 Razón del reporte', value: fields.reportReason || '—', inline: false }
     );
   }
@@ -704,7 +719,7 @@ function buildNewTicketEmbed(ticketNumber, category, member, fields) {
   return embed;
 }
 
-function buildTicketEmbed(ticket, ticketNumber, openerId, claimedMention) {
+function buildTicketEmbed(ticket, ticketNumber, openerId, claimedMention, channelId) {
   const isClaimed = !!claimedMention;
   const num = ticketNumber.toString().padStart(4, '0');
   const label = CATEGORY_LABELS[ticket.category] || '🎫 Ticket';
@@ -723,7 +738,8 @@ function buildTicketEmbed(ticket, ticketNumber, openerId, claimedMention) {
     .addFields(
       { name: '👤 Abierto por', value: `<@${openerId}>`, inline: true },
       { name: '📋 Estado', value: isClaimed ? '🟡 Reclamado' : '🟢 Abierto', inline: true },
-      { name: '🛡️ Reclamado por', value: claimedMention || 'Nadie', inline: true }
+      { name: '🛡️ Reclamado por', value: claimedMention || 'Nadie', inline: true },
+      { name: '📍 Canal del ticket', value: `<#${channelId}>`, inline: false }
     )
     .setColor(color)
     .setTimestamp();
@@ -731,7 +747,7 @@ function buildTicketEmbed(ticket, ticketNumber, openerId, claimedMention) {
   if (ticket.category === 'report' && ticket.fields) {
     embed.addFields(
       { name: '\u200b', value: '**— Detalles del Reporte —**', inline: false },
-      { name: '🎯 Usuario reportado', value: ticket.fields.reportedUser || '—', inline: false },
+      { name: '🎯 Personas reportadas', value: ticket.fields.reportedUser || '—', inline: false },
       { name: '📝 Razón del reporte', value: ticket.fields.reportReason || '—', inline: false }
     );
   }
@@ -760,6 +776,15 @@ function buildTicketEmbed(ticket, ticketNumber, openerId, claimedMention) {
   return embed;
 }
 
+async function replyTicketActionError(interaction, description) {
+  const embed = new EmbedBuilder()
+    .setTitle('❌ No se pudo completar la acción')
+    .setDescription(description)
+    .setColor(0xed4245)
+    .setTimestamp();
+  await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
 export async function handleClaimTicket(interaction) {
   const guild = interaction.guild;
   const member = interaction.member;
@@ -767,7 +792,7 @@ export async function handleClaimTicket(interaction) {
   const ticket = getTicket(guild.id, channel.id);
 
   if (!ticket) {
-    await interaction.reply({ content: '❌ Este no es un canal de ticket.', ephemeral: true });
+    await replyTicketActionError(interaction, 'Este no es un canal de ticket.');
     return;
   }
 
@@ -775,21 +800,28 @@ export async function handleClaimTicket(interaction) {
   const isStaff = canManageTicket(member, guildConfig, ticket);
 
   if (!isStaff) {
-    await interaction.reply({ content: '❌ No tienes permiso para reclamar este ticket.', ephemeral: true });
+    await replyTicketActionError(interaction, 'No tienes permiso para reclamar este ticket.');
     return;
   }
 
   if (ticket.claimedBy === member.user.id) {
-    await interaction.reply({ content: '❌ Ya reclamaste este ticket.', ephemeral: true });
+    await replyTicketActionError(interaction, 'Ya reclamaste este ticket.');
     return;
   }
 
   claimTicket(guild.id, channel.id, member.user.id, member.user.tag);
 
-  const updatedEmbed = buildTicketEmbed(ticket, ticket.ticketNumber, ticket.userId, `${member}`);
+  const updatedEmbed = buildTicketEmbed(
+    ticket,
+    ticket.ticketNumber,
+    ticket.userId,
+    `${member}`,
+    channel.id
+  );
   await interaction.update({ embeds: [updatedEmbed], components: interaction.message.components });
 
   const notifEmbed = new EmbedBuilder()
+    .setTitle('✋ Ticket reclamado')
     .setDescription(`✋ ${member} ha **reclamado** este ticket.`)
     .setColor(0xfee75c)
     .setTimestamp();
@@ -806,7 +838,7 @@ export async function handleUnclaimTicket(interaction) {
   const ticket = getTicket(guild.id, channel.id);
 
   if (!ticket) {
-    await interaction.reply({ content: '❌ Este no es un canal de ticket.', ephemeral: true });
+    await replyTicketActionError(interaction, 'Este no es un canal de ticket.');
     return;
   }
 
@@ -814,21 +846,28 @@ export async function handleUnclaimTicket(interaction) {
   const isStaff = canManageTicket(member, guildConfig, ticket);
 
   if (!isStaff) {
-    await interaction.reply({ content: '❌ No tienes permiso para liberar este ticket.', ephemeral: true });
+    await replyTicketActionError(interaction, 'No tienes permiso para liberar este ticket.');
     return;
   }
 
   if (!ticket.claimedBy) {
-    await interaction.reply({ content: '❌ Este ticket no está reclamado.', ephemeral: true });
+    await replyTicketActionError(interaction, 'Este ticket no está reclamado.');
     return;
   }
 
   unclaimTicket(guild.id, channel.id);
 
-  const updatedEmbed = buildTicketEmbed(ticket, ticket.ticketNumber, ticket.userId, null);
+  const updatedEmbed = buildTicketEmbed(
+    ticket,
+    ticket.ticketNumber,
+    ticket.userId,
+    null,
+    channel.id
+  );
   await interaction.update({ embeds: [updatedEmbed], components: interaction.message.components });
 
   const notifEmbed = new EmbedBuilder()
+    .setTitle('🔓 Ticket liberado')
     .setDescription(`🔓 ${member} ha **liberado** este ticket.`)
     .setColor(0x5865f2)
     .setTimestamp();
@@ -845,7 +884,7 @@ export async function handleCloseTicket(interaction) {
   const ticket = getTicket(guild.id, channel.id);
 
   if (!ticket) {
-    await interaction.reply({ content: '❌ Este no es un canal de ticket.', ephemeral: true });
+    await replyTicketActionError(interaction, 'Este no es un canal de ticket.');
     return;
   }
 
@@ -855,13 +894,15 @@ export async function handleCloseTicket(interaction) {
     ticket.userId === member.user.id;
 
   if (!isStaff) {
-    await interaction.reply({ content: '❌ No tienes permiso para cerrar este ticket.', ephemeral: true });
+    await replyTicketActionError(interaction, 'No tienes permiso para cerrar este ticket.');
     return;
   }
 
   const closeEmbed = new EmbedBuilder()
-    .setTitle('🔒 Cerrando Ticket')
-    .setDescription(`${member} ha cerrado este ticket.\nEl canal se eliminará en 5 segundos.`)
+    .setTitle('🔒 Ticket cerrado')
+    .setDescription(
+      `${member} ha cerrado este ticket en <#${channel.id}>.\nEl canal se eliminará en 5 segundos.`
+    )
     .setColor(0xed4245)
     .setTimestamp();
 

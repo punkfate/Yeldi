@@ -168,7 +168,10 @@ def build_panel_embed() -> discord.Embed:
     return embed
 
 
-def build_ticket_embed(ticket: dict[str, Any]) -> discord.Embed:
+def build_ticket_embed(
+    ticket: dict[str, Any],
+    channel_id: int | None = None,
+) -> discord.Embed:
     category = ticket.get("category", "general")
     label, color = CATEGORIES.get(category, ("🎫 Ticket", 0x5865F2))
     claimed = ticket.get("claimedBy")
@@ -189,9 +192,15 @@ def build_ticket_embed(ticket: dict[str, Any]) -> discord.Embed:
         value=f"<@{claimed}>" if claimed else "Nadie",
         inline=True,
     )
+    if channel_id:
+        embed.add_field(
+            name="📍 Canal del ticket",
+            value=f"<#{channel_id}>",
+            inline=False,
+        )
     fields = ticket.get("fields", {})
     if category == "report":
-        embed.add_field(name="🎯 Usuario reportado", value=fields.get("reportedUser", "—"), inline=False)
+        embed.add_field(name="🎯 Personas reportadas", value=fields.get("reportedUser", "—"), inline=False)
         embed.add_field(name="📝 Razón del reporte", value=fields.get("reportReason", "—"), inline=False)
     elif category == "general":
         embed.add_field(name="📝 Motivo del ticket", value=fields.get("generalReason", "—"), inline=False)
@@ -253,7 +262,7 @@ class TicketCategorySelect(discord.ui.Select):
 
         if category == "report":
             await interaction.response.send_message(
-                "**🚨 Reporte — Paso 1/2:** Selecciona al usuario que quieres reportar:",
+                "**🚨 Reporte — Paso 1/2:** Selecciona hasta 25 personas que quieras reportar:",
                 view=ReportUserView(),
                 ephemeral=True,
             )
@@ -273,15 +282,14 @@ class TicketPanelView(discord.ui.View):
 class ReportUserSelect(discord.ui.UserSelect):
     def __init__(self) -> None:
         super().__init__(
-            placeholder="Busca y selecciona al usuario a reportar...",
+            placeholder="Busca y selecciona hasta 25 usuarios...",
             min_values=1,
-            max_values=1,
+            max_values=25,
             custom_id="report_user_select",
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        target = self.values[0]
-        await interaction.response.send_modal(ReportTicketModal(target))
+        await interaction.response.send_modal(ReportTicketModal(self.values))
 
 
 class ReportUserView(discord.ui.View):
@@ -291,12 +299,14 @@ class ReportUserView(discord.ui.View):
 
 
 class ReportTicketModal(discord.ui.Modal, title="🚨 Reporte — Paso 2/2"):
-    def __init__(self, target: discord.User | discord.Member) -> None:
+    def __init__(self, selected_users: list[discord.User | discord.Member]) -> None:
         super().__init__(timeout=300)
+        self.reported_user_ids = [user.id for user in selected_users]
         self.reported_user = discord.ui.TextInput(
-            label="Usuario a reportar",
-            style=discord.TextStyle.short,
-            default=f"{target} ({target.id})"[:100],
+            label="Personas seleccionadas (no modificar)",
+            style=discord.TextStyle.paragraph,
+            default=", ".join(user.mention for user in selected_users)[:1000],
+            max_length=1000,
             required=True,
         )
         self.reason = discord.ui.TextInput(
@@ -315,7 +325,9 @@ class ReportTicketModal(discord.ui.Modal, title="🚨 Reporte — Paso 2/2"):
             interaction,
             "report",
             {
-                "reportedUser": self.reported_user.value,
+                "reportedUser": ", ".join(
+                    f"<@{user_id}>" for user_id in self.reported_user_ids
+                ),
                 "reportReason": self.reason.value,
             },
         )
@@ -463,7 +475,7 @@ async def open_ticket(
         save_state()
         await channel.send(
             content=member.mention,
-            embed=build_ticket_embed(ticket),
+            embed=build_ticket_embed(ticket, channel.id),
             view=TicketActionView(),
         )
         await interaction.followup.send(
@@ -483,40 +495,90 @@ async def handle_ticket_action(
     action: str,
 ) -> None:
     if not interaction.guild or not interaction.channel:
-        await interaction.response.send_message("Este botón solo funciona dentro de un ticket.", ephemeral=True)
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Acción no realizada",
+                description="Este botón solo funciona dentro de un ticket.",
+                color=discord.Color.red(),
+                timestamp=datetime.now(timezone.utc),
+            ),
+            ephemeral=True,
+        )
         return
     config = guild_config(interaction.guild.id)
     ticket = config["tickets"].get(str(interaction.channel.id))
     if not ticket:
-        await interaction.response.send_message("❌ Este no es un canal de ticket.", ephemeral=True)
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Acción no realizada",
+                description="Este no es un canal de ticket.",
+                color=discord.Color.red(),
+                timestamp=datetime.now(timezone.utc),
+            ),
+            ephemeral=True,
+        )
         return
     if not isinstance(interaction.user, discord.Member) or not can_manage_ticket(interaction.user, ticket):
-        await interaction.response.send_message("❌ No tienes permiso para gestionar este ticket.", ephemeral=True)
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ Acción no realizada",
+                description="No tienes permiso para gestionar este ticket.",
+                color=discord.Color.red(),
+                timestamp=datetime.now(timezone.utc),
+            ),
+            ephemeral=True,
+        )
         return
 
     if action == "claim":
         if ticket.get("claimedBy") == str(interaction.user.id):
-            await interaction.response.send_message("❌ Ya reclamaste este ticket.", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="❌ Acción no realizada",
+                    description="Ya reclamaste este ticket.",
+                    color=discord.Color.red(),
+                    timestamp=datetime.now(timezone.utc),
+                ),
+                ephemeral=True,
+            )
             return
         ticket["claimedBy"] = str(interaction.user.id)
         ticket["claimedByTag"] = str(interaction.user)
-        notification = f"✋ {interaction.user.mention} ha **reclamado** este ticket."
+        notification = discord.Embed(
+            title="✋ Ticket reclamado",
+            description=f"{interaction.user.mention} ha reclamado este ticket.",
+            color=discord.Color.gold(),
+            timestamp=datetime.now(timezone.utc),
+        )
         new_name = f"reclamado-{interaction.channel.name.removeprefix('reclamado-')}"[:100]
     else:
         if not ticket.get("claimedBy"):
-            await interaction.response.send_message("❌ Este ticket no está reclamado.", ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="❌ Acción no realizada",
+                    description="Este ticket no está reclamado.",
+                    color=discord.Color.red(),
+                    timestamp=datetime.now(timezone.utc),
+                ),
+                ephemeral=True,
+            )
             return
         ticket["claimedBy"] = None
         ticket["claimedByTag"] = None
-        notification = f"🔓 {interaction.user.mention} ha **liberado** este ticket."
+        notification = discord.Embed(
+            title="🔓 Ticket liberado",
+            description=f"{interaction.user.mention} ha liberado este ticket.",
+            color=discord.Color.blurple(),
+            timestamp=datetime.now(timezone.utc),
+        )
         new_name = interaction.channel.name.removeprefix("reclamado-")[:100]
 
     save_state()
     await interaction.response.edit_message(
-        embed=build_ticket_embed(ticket),
+        embed=build_ticket_embed(ticket, interaction.channel.id),
         view=TicketActionView(),
     )
-    await interaction.channel.send(notification)
+    await interaction.channel.send(embed=notification)
     try:
         await interaction.channel.edit(name=new_name)
     except discord.HTTPException:
@@ -562,26 +624,68 @@ small{{margin-left:1rem;color:#9ca3af}}a{{color:#93c5fd}}</style>
 
 async def close_ticket(interaction: discord.Interaction) -> None:
     if not interaction.guild or not isinstance(interaction.channel, discord.TextChannel):
-        await interaction.response.send_message("❌ Este no es un canal de ticket.", ephemeral=True)
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ No se pudo cerrar el ticket",
+                description="Este no es un canal de ticket.",
+                color=discord.Color.red(),
+                timestamp=datetime.now(timezone.utc),
+            ),
+            ephemeral=True,
+        )
         return
     config = guild_config(interaction.guild.id)
     ticket = config["tickets"].get(str(interaction.channel.id))
     if not ticket:
-        await interaction.response.send_message("❌ Este no es un canal de ticket.", ephemeral=True)
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ No se pudo cerrar el ticket",
+                description="Este no es un canal de ticket.",
+                color=discord.Color.red(),
+                timestamp=datetime.now(timezone.utc),
+            ),
+            ephemeral=True,
+        )
         return
     if not isinstance(interaction.user, discord.Member):
-        await interaction.response.send_message("No se pudo identificar al miembro.", ephemeral=True)
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ No se pudo cerrar el ticket",
+                description="No se pudo identificar al miembro.",
+                color=discord.Color.red(),
+                timestamp=datetime.now(timezone.utc),
+            ),
+            ephemeral=True,
+        )
         return
     allowed = (
         can_manage_ticket(interaction.user, ticket)
         or str(ticket.get("userId")) == str(interaction.user.id)
     )
     if not allowed:
-        await interaction.response.send_message("❌ No tienes permiso para cerrar este ticket.", ephemeral=True)
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="❌ No se pudo cerrar el ticket",
+                description="No tienes permiso para cerrar este ticket.",
+                color=discord.Color.red(),
+                timestamp=datetime.now(timezone.utc),
+            ),
+            ephemeral=True,
+        )
         return
 
-    await interaction.response.send_message("🔒 Cerrando el ticket y guardando la transcripción.", ephemeral=True)
     channel = interaction.channel
+    close_embed = discord.Embed(
+        title="🔒 Ticket cerrado",
+        description=(
+            f"{interaction.user.mention} ha cerrado el ticket.\n"
+            f"Canal: {channel.mention}\n"
+            "Se guardará la transcripción y el canal se eliminará."
+        ),
+        color=discord.Color.red(),
+        timestamp=datetime.now(timezone.utc),
+    )
+    await interaction.response.send_message(embed=close_embed)
     try:
         messages = [message async for message in channel.history(limit=None, oldest_first=True)]
         transcript_html = render_transcript_html(ticket, messages, str(interaction.user))
@@ -892,10 +996,18 @@ class JesterBot(commands.Bot):
                 await prefix_member_action(message, command, args)
             elif command == "unban":
                 if not args:
-                    await message.reply("Uso: `!unban <ID>`")
+                    await message.reply('Uso: `!unban <ID> ["razón"]`')
                 else:
-                    await message.guild.unban(discord.Object(id=int(args[0])))
-                    await message.reply(f"✅ Usuario con ID **{args[0]}** desbaneado.")
+                    target_match = re.fullmatch(r"<@!?(\d+)>", args[0])
+                    target_id = target_match.group(1) if target_match else args[0]
+                    reason = " ".join(args[1:]).strip() or "Razón no especificada"
+                    await message.guild.unban(
+                        discord.Object(id=int(target_id)),
+                        reason=reason,
+                    )
+                    await message.reply(
+                        f"✅ <@{target_id}> ha sido desbaneado. Razón: {reason}"
+                    )
             else:
                 await message.reply(f"Comando desconocido: `{command}`. Usa `!help`.")
         except (ValueError, discord.Forbidden, discord.HTTPException) as error:
@@ -922,7 +1034,11 @@ def build_help_embed() -> discord.Embed:
     )
     embed.add_field(
         name="🛡️ Moderación",
-        value="`/kick`, `/ban`, `/unban`, `/mute`, `/unmute`, `/clear`",
+        value=(
+            "`/kick`, `/ban`, `/mute`, `/unmute` — miembro y razón opcional\n"
+            "`/unban` — ID y razón opcional; en comandos `!`, pon primero el usuario/ID y luego la razón.\n"
+            "Si no indicas razón, se usará “Razón no especificada”."
+        ),
         inline=False,
     )
     embed.add_field(
@@ -935,8 +1051,9 @@ def build_help_embed() -> discord.Embed:
         value=(
             "`!hola`, `!info`, `!ping`, `!say`, `!lock`, `!unlock`, `!clear`\n"
             "`!kick`, `!ban`, `!unban`, `!mute`, `!unmute`, `!help`\n"
-            "En `!kick`, `!ban`, `!mute` y `!unmute` puedes usar nombre exacto o ID; "
-            "pon entre comillas los nombres con espacios. `!unban` usa un ID."
+            "En `!kick`, `!ban`, `!mute` y `!unmute` puedes usar mención, nombre exacto o ID; "
+            "pon entre comillas los nombres con espacios y añade la razón después del usuario. "
+            "`!unban` usa ID y acepta razón."
         ),
         inline=False,
     )
@@ -1125,11 +1242,12 @@ async def clear(
 async def kick(
     interaction: discord.Interaction,
     miembro: discord.Member,
-    razon: str = "Sin razón especificada",
+    razon: str = "Razón no especificada",
 ) -> None:
+    razon = razon.strip() or "Razón no especificada"
     await miembro.kick(reason=razon)
     await interaction.response.send_message(
-        f"👢 **{miembro}** ha sido expulsado. Razón: {razon}",
+        f"👢 <@{miembro.id}> ha sido expulsado. Razón: {razon}",
         ephemeral=True,
     )
 
@@ -1141,11 +1259,12 @@ async def kick(
 async def ban(
     interaction: discord.Interaction,
     miembro: discord.Member,
-    razon: str = "Sin razón especificada",
+    razon: str = "Razón no especificada",
 ) -> None:
+    razon = razon.strip() or "Razón no especificada"
     await miembro.ban(reason=razon)
     await interaction.response.send_message(
-        f"🔨 **{miembro}** ha sido baneado. Razón: {razon}",
+        f"🔨 <@{miembro.id}> ha sido baneado. Razón: {razon}",
         ephemeral=True,
     )
 
@@ -1154,10 +1273,18 @@ async def ban(
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
-async def unban(interaction: discord.Interaction, id: str) -> None:
+async def unban(
+    interaction: discord.Interaction,
+    id: str,
+    razon: str = "Razón no especificada",
+) -> None:
+    razon = razon.strip() or "Razón no especificada"
     try:
-        await interaction.guild.unban(discord.Object(id=int(id)))
-        await interaction.response.send_message(f"✅ Usuario con ID **{id}** desbaneado.", ephemeral=True)
+        await interaction.guild.unban(discord.Object(id=int(id)), reason=razon)
+        await interaction.response.send_message(
+            f"✅ <@{id}> ha sido desbaneado. Razón: {razon}",
+            ephemeral=True,
+        )
     except (ValueError, discord.NotFound):
         await interaction.response.send_message("❌ No se encontró ese usuario en la lista de baneados.", ephemeral=True)
 
@@ -1185,12 +1312,13 @@ async def get_muted_role(guild: discord.Guild) -> discord.Role:
 async def mute(
     interaction: discord.Interaction,
     miembro: discord.Member,
-    razon: str = "Sin razón especificada",
+    razon: str = "Razón no especificada",
 ) -> None:
+    razon = razon.strip() or "Razón no especificada"
     role = await get_muted_role(interaction.guild)
     await miembro.add_roles(role, reason=razon)
     await interaction.response.send_message(
-        f"🔇 **{miembro}** ha sido silenciado. Razón: {razon}",
+        f"🔇 <@{miembro.id}> ha sido silenciado. Razón: {razon}",
         ephemeral=True,
     )
 
@@ -1199,13 +1327,18 @@ async def mute(
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
-async def unmute(interaction: discord.Interaction, miembro: discord.Member) -> None:
+async def unmute(
+    interaction: discord.Interaction,
+    miembro: discord.Member,
+    razon: str = "Razón no especificada",
+) -> None:
+    razon = razon.strip() or "Razón no especificada"
     role = discord.utils.get(interaction.guild.roles, name="Muted")
     if role and role in miembro.roles:
-        await miembro.remove_roles(role)
-        text = f"🔊 **{miembro}** ya puede hablar de nuevo."
+        await miembro.remove_roles(role, reason=razon)
+        text = f"🔊 <@{miembro.id}> ya puede hablar de nuevo. Razón: {razon}"
     else:
-        text = "❌ Ese miembro no está silenciado."
+        text = f"❌ <@{miembro.id}> no está silenciado."
     await interaction.response.send_message(text, ephemeral=True)
 
 
@@ -1281,24 +1414,24 @@ async def prefix_member_action(
             )
         return
 
-    reason = " ".join(args[1:]) or "Sin razón especificada"
+    reason = " ".join(args[1:]).strip() or "Razón no especificada"
     if action == "kick":
         await member.kick(reason=reason)
-        await message.reply(f"👢 **{member}** ha sido expulsado. Razón: {reason}")
+        await message.reply(f"👢 <@{member.id}> ha sido expulsado. Razón: {reason}")
     elif action == "ban":
         await member.ban(reason=reason)
-        await message.reply(f"🔨 **{member}** ha sido baneado. Razón: {reason}")
+        await message.reply(f"🔨 <@{member.id}> ha sido baneado. Razón: {reason}")
     elif action == "mute":
         role = await get_muted_role(message.guild)
         await member.add_roles(role, reason=reason)
-        await message.reply(f"🔇 **{member}** ha sido silenciado.")
+        await message.reply(f"🔇 <@{member.id}> ha sido silenciado. Razón: {reason}")
     elif action == "unmute":
         role = discord.utils.get(message.guild.roles, name="Muted")
         if role and role in member.roles:
-            await member.remove_roles(role)
-            await message.reply(f"🔊 **{member}** ya puede hablar de nuevo.")
+            await member.remove_roles(role, reason=reason)
+            await message.reply(f"🔊 <@{member.id}> ya puede hablar de nuevo. Razón: {reason}")
         else:
-            await message.reply("❌ Ese miembro no está silenciado.")
+            await message.reply(f"❌ <@{member.id}> no está silenciado.")
 
 
 @bot.tree.error
