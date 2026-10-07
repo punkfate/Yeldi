@@ -38,10 +38,14 @@
       "1511523853895995420"
     ],
     "tickets": {},
-    "ticketCounter": 6,
+    "ticketCounter": 7,
     "transcriptChannel": "1511523978483597456",
     "twitchModRoles": [
       "1511523857863938111"
-    ]
+    ],
+    "ticketPanel": {
+      "channelId": "1511523971013804193",
+      "messageId": "1557461619548627100"
+    }
   }
 }
