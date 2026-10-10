@@ -547,6 +547,15 @@ function canManageTicket(member, guildConfig, ticket) {
   return guildConfig.staffRoles.some(roleId => member.roles.cache.has(roleId));
 }
 
+function canCloseTicket(member, guildConfig, ticket) {
+  if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+  if (guildConfig.staffRoles.some(roleId => member.roles.cache.has(roleId))) return true;
+
+  return ticket.category === 'twitch_support' &&
+    getConfiguredRoles(member.guild, guildConfig.twitchModRoles)
+      .some(role => member.roles.cache.has(role.id));
+}
+
 function buildPermissionOverwrite(client, id, type, { allow = [], deny = [] } = {}) {
   return new PermissionOverwrites(client, {
     id: typeof id === 'string' ? id : id.id,
@@ -889,12 +898,13 @@ export async function handleCloseTicket(interaction) {
   }
 
   const guildConfig = getGuildConfig(guild.id);
-  const isStaff =
-    canManageTicket(member, guildConfig, ticket) ||
-    ticket.userId === member.user.id;
+  const isStaff = canCloseTicket(member, guildConfig, ticket);
 
   if (!isStaff) {
-    await replyTicketActionError(interaction, 'No tienes permiso para cerrar este ticket.');
+    await replyTicketActionError(
+      interaction,
+      'Solo administradores, staff y, en tickets de Twitch, moderadores de Twitch configurados pueden cerrarlo.'
+    );
     return;
   }
 
@@ -907,8 +917,6 @@ export async function handleCloseTicket(interaction) {
     .setTimestamp();
 
   await interaction.reply({ embeds: [closeEmbed] });
-
-  deleteTicket(guild.id, channel.id);
 
   try {
     const allMessages = [];
@@ -1034,11 +1042,28 @@ export async function handleCloseTicket(interaction) {
     console.error('Error al generar transcripción:', err);
   }
 
-  setTimeout(async () => {
+  await new Promise(resolve => setTimeout(resolve, 5000));
+
+  try {
+    await channel.delete(`Ticket cerrado por ${member.user.tag}`);
+    deleteTicket(guild.id, channel.id);
+  } catch (err) {
+    console.error('Error al eliminar el canal del ticket:', err);
+    const deleteErrorEmbed = new EmbedBuilder()
+      .setTitle('❌ No se pudo eliminar el ticket')
+      .setDescription(
+        'El ticket sigue abierto. Comprueba que el bot tenga permiso para gestionar canales e inténtalo de nuevo.'
+      )
+      .setColor(0xed4245)
+      .setTimestamp();
+
     try {
-      await channel.delete(`Ticket cerrado por ${member.user.tag}`);
-    } catch (err) {
-      console.error('Error al eliminar el canal del ticket:', err);
+      await interaction.followUp({
+        embeds: [deleteErrorEmbed],
+        ephemeral: true
+      });
+    } catch (followUpError) {
+      console.error('No se pudo informar del error al cerrar el ticket:', followUpError);
     }
-  }, 5000);
+  }
 }
