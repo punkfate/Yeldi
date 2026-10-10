@@ -293,6 +293,37 @@ async function registerSlashCommands(client) {
   console.log(`🔄 Preparando ${commandBody.length} comandos slash...`);
 
   try {
+    let previousGlobalCommandCount;
+
+    try {
+      const previousGlobalCommands = await rest.get(
+        Routes.applicationCommands(client.user.id)
+      );
+      previousGlobalCommandCount = previousGlobalCommands.length;
+    } catch (error) {
+      console.error(
+        'No se pudo consultar el registro global de comandos:',
+        error.message
+      );
+    }
+
+    try {
+      await rest.put(
+        Routes.applicationCommands(client.user.id),
+        { body: [] }
+      );
+
+      console.log(
+        previousGlobalCommandCount === undefined
+          ? '🧹 Registro global de comandos vaciado; usaré solo comandos por servidor.'
+          : `🧹 Registro global vaciado (${previousGlobalCommandCount} comando(s) anterior(es)); usaré solo comandos por servidor.`
+      );
+    } catch (error) {
+      console.error(
+        'No se pudieron eliminar los comandos globales antiguos; continuaré con la sincronización por servidor.',
+        error.message
+      );
+    }
 
     if (client.guilds.cache.size === 0) {
       console.log('⚠️ El bot no está en ningún servidor.');

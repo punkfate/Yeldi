@@ -141,8 +141,8 @@ def build_panel_embed() -> discord.Embed:
     embed.add_field(
         name="🛠️ Soporte de Administración",
         value=(
-            "Privado: lo verá quien abre el ticket, los administradores y "
-            "los roles configurados con `/roleadd manager`."
+            "Privado: lo verá quien abre el ticket, el propietario del servidor, "
+            "los administradores y el equipo de gestión."
         ),
         inline=False,
     )
@@ -150,7 +150,7 @@ def build_panel_embed() -> discord.Embed:
         name="🎥 Soporte de Twitch",
         value=(
             "Privado: lo verá quien abre el ticket, los administradores y "
-            "los roles configurados con `/roleadd twitch`."
+            "los moderadores de Twitch."
         ),
         inline=False,
     )
@@ -224,13 +224,13 @@ class TicketCategorySelect(discord.ui.Select):
             ),
             discord.SelectOption(
                 label="Soporte de Administración",
-                description="Administradores y rol manager configurado",
+                description="Privado: propietario, administradores y equipo de gestión",
                 emoji="🛠️",
                 value="admin_support",
             ),
             discord.SelectOption(
                 label="Soporte de Twitch",
-                description="Administradores y rol de Twitch configurado",
+                description="Privado: administradores y moderadores de Twitch",
                 emoji="🎥",
                 value="twitch_support",
             ),
@@ -918,21 +918,69 @@ class JesterBot(commands.Bot):
         intents.message_content = True
         super().__init__(command_prefix=PREFIX, intents=intents)
         self._reconciled = False
+        self._commands_synced = False
 
     async def setup_hook(self) -> None:
         self.add_view(TicketPanelView())
         self.add_view(TicketActionView())
+
+    async def sync_guild_commands(self) -> bool:
+        if GUILD_ID.isdigit():
+            guilds = [discord.Object(id=int(GUILD_ID))]
+        else:
+            guilds = list(self.guilds)
+
+        global_commands = self.tree.get_commands()
+        sync_succeeded = True
         try:
-            if GUILD_ID.isdigit():
-                guild = discord.Object(id=int(GUILD_ID))
+            for guild in guilds:
                 self.tree.copy_global_to(guild=guild)
-                await self.tree.sync(guild=guild)
-                log.info("Comandos sincronizados en el servidor %s", GUILD_ID)
-            else:
-                await self.tree.sync()
-                log.info("Comandos globales sincronizados")
+
+            self.tree.clear_commands(guild=None)
+            await self.tree.sync()
+            log.info("Comandos globales antiguos eliminados")
         except discord.HTTPException:
-            log.exception("No se pudieron sincronizar los comandos")
+            log.exception("No se pudieron eliminar los comandos globales antiguos")
+            sync_succeeded = False
+        finally:
+            if not self.tree.get_commands():
+                for command in global_commands:
+                    self.tree.add_command(command)
+
+        for guild in guilds:
+            try:
+                commands = await self.tree.sync(guild=guild)
+                log.info(
+                    "%s comandos sincronizados en el servidor %s",
+                    len(commands),
+                    getattr(guild, "name", guild.id),
+                )
+            except discord.HTTPException:
+                log.exception(
+                    "No se pudieron sincronizar los comandos en el servidor %s",
+                    guild.id,
+                )
+                sync_succeeded = False
+
+        return sync_succeeded
+
+    async def on_guild_join(self, guild: discord.Guild) -> None:
+        if GUILD_ID.isdigit() and guild.id != int(GUILD_ID):
+            return
+
+        try:
+            self.tree.copy_global_to(guild=guild)
+            commands = await self.tree.sync(guild=guild)
+            log.info(
+                "%s comandos sincronizados en el nuevo servidor %s",
+                len(commands),
+                guild.name,
+            )
+        except discord.HTTPException:
+            log.exception(
+                "No se pudieron sincronizar los comandos en el nuevo servidor %s",
+                guild.id,
+            )
 
     async def on_ready(self) -> None:
         if self.user:
@@ -941,6 +989,8 @@ class JesterBot(commands.Bot):
                 status=discord.Status.online,
             )
             log.info("Bot conectado como %s en %s servidor(es)", self.user, len(self.guilds))
+        if not self._commands_synced:
+            self._commands_synced = await self.sync_guild_commands()
         if not self._reconciled:
             self._reconciled = True
             for guild in self.guilds:

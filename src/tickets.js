@@ -64,8 +64,8 @@ function buildTicketPanelPayload() {
     .addFields(
       { name: '🚨 Reportes', value: 'Informa sobre usuarios que hayan incumplido las normas.', inline: false },
       { name: '❓ Dudas Generales', value: 'Preguntas o ayuda general relacionada con Jester’s Club.', inline: false },
-      { name: '🛠️ Soporte de Administración', value: 'Privado: lo verá quien abre el ticket, los administradores y el rol configurado con `/roleadd manager`.', inline: false },
-      { name: '🎥 Soporte de Twitch', value: 'Privado: lo verá quien abre el ticket, los administradores y el rol configurado con `/roleadd twitch`.', inline: false },
+      { name: '🛠️ Soporte de Administración', value: 'Privado: lo verá quien abre el ticket, el propietario del servidor, los administradores y el equipo de gestión.', inline: false },
+      { name: '🎥 Soporte de Twitch', value: 'Privado: lo verá quien abre el ticket, los administradores y los moderadores de Twitch.', inline: false },
       {
         name: '📋 Normas',
         value: [
@@ -97,12 +97,12 @@ function buildTicketPanelPayload() {
         .setValue('general'),
       new StringSelectMenuOptionBuilder()
         .setLabel('Soporte de Administración')
-        .setDescription('Administradores y rol manager configurado')
+        .setDescription('Privado: propietario, administradores y equipo de gestión')
         .setEmoji('🛠️')
         .setValue('admin_support'),
       new StringSelectMenuOptionBuilder()
         .setLabel('Soporte de Twitch')
-        .setDescription('Administradores y rol de Twitch configurado')
+        .setDescription('Privado: administradores y moderadores de Twitch')
         .setEmoji('🎥')
         .setValue('twitch_support')
     );
@@ -285,12 +285,12 @@ export async function handleTicketsPanel(interaction) {
       },
       {
         name: '🛠️ Soporte de Administración',
-        value: 'Para asuntos que necesitan la atención de administradores o managers. Estos tickets son privados y solo los verá el usuario que lo abre, los administradores y los managers.',
+        value: 'Para asuntos que necesitan la atención del propietario, los administradores o el equipo de gestión. Estos tickets son privados y solo los verá el usuario que lo abre y el equipo autorizado.',
         inline: false
       },
       {
         name: '🎥 Soporte de Twitch',
-        value: 'Para problemas relacionados con Twitch, directos, clips, canales o moderación. Estos tickets son privados y solo los verá el usuario que lo abre, los administradores y los moderadores de Twitch configurados.',
+        value: 'Para problemas relacionados con Twitch, directos, clips, canales o moderación. Estos tickets son privados y solo los verá el usuario que lo abre, los administradores y los moderadores de Twitch.',
         inline: false
       },
       {
@@ -325,12 +325,12 @@ export async function handleTicketsPanel(interaction) {
         .setValue('general'),
       new StringSelectMenuOptionBuilder()
         .setLabel('Soporte de Administración')
-        .setDescription('Contacta con los administradores o managers de Jester\'s Club')
+        .setDescription('Privado: propietario, administradores y equipo de gestión')
         .setEmoji('🛠️')
         .setValue('admin_support'),
       new StringSelectMenuOptionBuilder()
         .setLabel('Soporte de Twitch')
-        .setDescription('Contacta con los moderadores de Twitch de Jester\'s Club')
+        .setDescription('Privado: administradores y moderadores de Twitch')
         .setEmoji('🎥')
         .setValue('twitch_support')
     );

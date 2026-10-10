@@ -13,7 +13,7 @@ Paquete portable del bot de Discord, preparado para ejecutarse fuera de Replit.
 
 - Python 3.10 o posterior.
 - Un token de bot de Discord configurado como variable de entorno `DISCORD_BOT_TOKEN`.
-- Para sincronizar comandos rápidamente en un servidor concreto, configura también `GUILD_ID` con el ID del servidor. Si no se define, los comandos se sincronizan globalmente y Discord puede tardar en mostrarlos.
+- Los comandos se sincronizan por servidor para evitar duplicados con registros globales antiguos. Si defines `GUILD_ID`, se sincronizan solo en ese servidor; si no, en todos los servidores donde esté el bot.
 
 No incluyas el token en `bot.py`, en este ZIP ni en repositorios públicos. Guárdalo en el gestor de variables/secretos de tu hosting.
 
